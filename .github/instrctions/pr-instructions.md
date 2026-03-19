@@ -38,12 +38,27 @@ Apply these steps when the user says any of the following:
 ## Commit and Push
 
 1. Stage only intended files.
-2. Use a clear commit message:
+2. Use a clear and meaningful commit message that explains the actual change:
    - `feat: ...`
    - `fix: ...`
    - `chore: ...`
    - `docs: ...`
-3. Push branch to origin.
+3. Commit message rules:
+   - Describe impact, not generic action words like "update" or "changes"
+   - Keep subject line concise (around 50-72 chars)
+   - Use imperative mood (e.g., "add", "fix", "refactor")
+   - Mention scope when helpful (e.g., `docs`, `k8s`, `backend`, `cli`)
+   - If the change is non-trivial, add a body with why and key details
+4. Good examples:
+   - `docs: define PR workflow for branch-first pushes`
+   - `fix(backend): handle missing DB env vars during startup`
+   - `chore(ci): validate k8s manifests on pull requests`
+5. Avoid vague messages:
+   - `update files`
+   - `changes`
+   - `wip`
+6. If multiple unrelated changes exist, split into separate commits with focused messages.
+7. Push branch to origin.
 
 ## Pull Request
 
