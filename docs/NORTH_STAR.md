@@ -1,123 +1,144 @@
-# North Star Document — Autonomous DevEx Platform (ADEP)
+# North Star — CI Failure Intelligence (CIFI)
 
-## 🎯 Vision
+## Vision
 
-Build a production-inspired internal developer platform that enables engineers to:
-
-* Deploy applications with minimal effort
-* Automatically validate, build, and release code
-* Gain deep visibility into system behavior
-* Detect and analyze failures using AI
+Build an AI-powered agent that autonomously diagnoses CI pipeline failures, identifies root causes, and delivers actionable fix suggestions — eliminating the manual log-triage loop that drains engineering time across every team running CI at scale.
 
 ---
 
-## 🚀 Mission
+## The Problem Worth Solving
 
-To simulate a real-world Platform Engineering / DevEx system that integrates:
+Every engineer who runs CI pipelines knows this loop:
 
-* CI/CD automation
-* Cloud infrastructure provisioning
-* Container orchestration
-* Observability and monitoring
-* Data pipelines
-* AI-assisted debugging
+1. Pipeline fails
+2. Engineer opens logs — 3,000 lines of noise
+3. Engineer searches for the actual error buried in the middle
+4. Engineer context-switches, loses flow, spends 20–40 minutes triaging
+5. The fix takes 5 minutes. The diagnosis took 40.
 
----
-
-## 👤 Target Users
-
-* Developers deploying services
-* Platform engineers managing infrastructure
-* SREs monitoring system health
+This happens dozens of times per day across any engineering team. It is solved nowhere well. It is ripe for automation.
 
 ---
 
-## 🧠 Core Problem
+## What CIFI Does
 
-Modern systems are:
+CIFI watches CI pipelines. When a failure occurs, it:
 
-* Complex to deploy
-* Difficult to debug
-* Fragmented across tools
+- Pulls the raw logs, test output, and diff from the triggering commit
+- Sends them through an AI analysis pipeline
+- Returns a structured, human-readable root cause summary
+- Posts the summary directly to the PR or Slack channel
+- Tracks recurring failure patterns over time
 
-This platform solves:
-
-* Manual deployments
-* Lack of observability
-* Slow debugging workflows
+Engineers stop triaging logs. They read a three-line summary and fix the issue.
 
 ---
 
-## 💡 Solution
+## Why This Project — Career Context
 
-A unified platform that:
+This project exists to solve a real problem **and** to serve a deliberate career purpose.
 
-1. Automates build → test → deploy
-2. Provides real-time observability
-3. Collects logs and system signals
-4. Uses AI to generate failure insights
-5. Offers a simple CLI for developers
+| Career Goal | How CIFI Serves It |
+|---|---|
+| Escape QA/embedded framing | Demonstrates platform-level ownership, not test execution |
+| Add cloud/infra keywords legitimately | Deployed on AWS EKS, provisioned via Terraform |
+| Showcase AI tooling depth | MCP server integration, LLM-powered analysis pipeline |
+| Public proof of skills | Fully open-source, demoable, yours to own in interviews |
+| Target DevEx/Platform roles | Directly solves a Developer Experience problem |
 
----
-
-## 🧭 Success Criteria
-
-* A developer can deploy a service in one command
-* CI/CD pipeline runs automatically on code push
-* System metrics and logs are visible in dashboards
-* Failures are detectable and analyzable
-* AI provides meaningful debugging insights
+This is not a resume checkbox project. It is a real tool that solves a real problem, built in a way that happens to cover the skills gap precisely.
 
 ---
 
-## 🗺️ Scope
+## Success Criteria
 
-### ✅ In Scope
+### Minimum Viable (Week 6)
+- [ ] Monitors a GitHub Actions pipeline
+- [ ] Triggers analysis on failure
+- [ ] Returns a structured root cause summary (failure type, likely cause, suggested fix)
+- [ ] Posts output to PR comment
+- [ ] Clean README with demo GIF
 
-* Single service deployment
-* CI/CD pipeline (GitHub Actions)
-* Docker + Kubernetes deployment
-* Prometheus + Grafana observability
-* Simple data ingestion pipeline
-* AI log analysis
+### Full Version (Week 12)
+- [ ] Deployed on AWS EKS via Terraform
+- [ ] Failure pattern tracking across runs (recurring failures flagged)
+- [ ] Slack integration
+- [ ] Simple web dashboard showing failure history and trends
+- [ ] CLI tool (`cifi analyze`, `cifi history`, `cifi status`)
+- [ ] Support for Jenkins (in addition to GitHub Actions)
 
-### ❌ Out of Scope
-
-* Multi-region deployments
-* Complex microservices orchestration
-* Production-grade security hardening
-* High-scale distributed systems
-
----
-
-## 🧠 Guiding Principles
-
-* **Automation-first**
-* **Keep it simple but real**
-* **Focus on end-to-end flow**
-* **Build observable systems**
-* **Optimize for learning and demonstration**
+### Stretch
+- [ ] Self-hosted LLM option (Ollama) for teams that can't send logs to external APIs
+- [ ] Auto-creates GitHub issue with triage summary when failure recurs 3+ times
+- [ ] Embeddings-based similarity search across historical failures
 
 ---
 
-## 🔥 End State
+## What This Project Is Not
 
-A working system where:
+- Not a full observability platform (Prometheus/Grafana belongs elsewhere)
+- Not a general-purpose AI coding assistant
+- Not a replacement for writing good tests
+- Not a microservices demo — intentionally single-service focused
 
-* Code push → triggers pipeline
-* Pipeline → builds and deploys app
-* App → emits metrics and logs
-* Platform → monitors system health
-* AI → explains failures
+Scope discipline is a feature. A sharp tool beats a sprawling one every time.
 
 ---
 
-## 📌 Why This Matters
+## Guiding Principles
 
-This project demonstrates:
+**Real over impressive.** Every component should solve an actual problem, not exist to pad the architecture diagram.
 
-* Real-world system design
-* Platform engineering skills
-* Cloud-native architecture
-* Automation mindset
-* AI integration in engineering workflows
+**Depth over breadth.** One well-understood system beats five half-understood ones.
+
+**Deployable beats theoretical.** If it doesn't run, it doesn't exist.
+
+**Your story, your code.** This is public, owned by you, and something you can speak to completely in any interview.
+
+---
+
+## Target Audience (for the tool itself)
+
+- Engineering teams of 10–200 engineers running CI on GitHub Actions or Jenkins
+- Platform/DevEx engineers responsible for CI reliability
+- Any team where CI failure triage is a recurring time sink
+
+---
+
+## Technology Choices — Why
+
+| Tool | Why |
+|---|---|
+| GitHub Actions | Most portable, most familiar to hiring teams, free for public repos |
+| Python | Your strongest language, dominant in AI/tooling space |
+| FastAPI | Lightweight, async, well-suited for a webhook receiver |
+| Claude / OpenAI API | Best-in-class log analysis, easy to swap between |
+| MCP Server | Differentiating — connects CIFI to AI agent workflows, a skill you already have |
+| Kubernetes (kind/minikube → EKS) | Legitimate K8s experience, deployable locally first |
+| Terraform | Infrastructure-as-code for EKS + supporting resources |
+| PostgreSQL | Simple, proven persistence for failure history |
+| Docker | Containerization, already in your skillset |
+
+---
+
+## Timeline
+
+| Phase | Weeks | Deliverable |
+|---|---|---|
+| 1 — Core Engine | 1–2 | Log ingestion + AI analysis pipeline working locally |
+| 2 — GitHub Integration | 3–4 | Webhook receiver, PR comment posting, demo on real repo |
+| 3 — Persistence + Patterns | 5–6 | DB layer, failure history, recurring pattern detection — **MVP complete** |
+| 4 — Infrastructure | 7–8 | Dockerized, deployed on EKS via Terraform |
+| 5 — Observability + CLI | 9–10 | Basic dashboard, CLI tool, Slack integration |
+| 6 — Polish + Launch | 11–12 | README, demo video, blog post, LinkedIn post |
+
+---
+
+## Definition of Done
+
+CIFI is done when:
+- A developer can install it in under 10 minutes
+- It catches and summarizes a real CI failure without human intervention
+- It is deployed on real cloud infrastructure
+- You can demo it live in an interview and explain every design decision
+- The GitHub repo has a README that makes a hiring manager stop scrolling
