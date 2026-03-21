@@ -1,4 +1,4 @@
-# ADEP PR and Push Instructions
+# CIFI PR and Push Instructions
 
 Use this workflow whenever the user asks to push changes.
 

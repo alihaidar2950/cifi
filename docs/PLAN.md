@@ -1,27 +1,27 @@
-# Implementation Plan — Autonomous DevEx Platform (ADEP) v2
+# Implementation Plan — CI Failure Intelligence (CIFI)
 
 ## TL;DR
 
-Adopt the **full-stack-fastapi-template** (FastAPI + React + PostgreSQL + Docker Compose + JWT auth) as the production-realistic application, then layer Kubernetes orchestration, enhanced CI/CD, Prometheus/Grafana observability, a data ingestion pipeline, AI failure analysis, and a developer CLI on top. Each phase is independently testable with explicit human checkpoints.
+Build an AI-powered CI failure analysis agent using the **full-stack-fastapi-template** (FastAPI + React + PostgreSQL + Docker Compose + JWT auth) as the application foundation. CIFI watches CI pipelines for failures, ingests logs and context, runs them through an LLM analysis pipeline, and delivers structured root cause summaries to developers via PR comments, Slack, or a web dashboard. Each phase is independently testable with explicit human checkpoints.
 
 **What the template gives us for free**: Full-stack app with auth, Docker Compose, Traefik reverse proxy, Postgres, pre-commit hooks, pytest + Playwright tests, basic GitHub Actions CI, Alembic migrations, email-based password recovery via Mailcatcher.
 
-**What we build**: K8s deployment, observability stack, data pipelines, AI analyzer, developer CLI, and optional IaC.
+**What we build**: Webhook receiver, log ingestion engine, preprocessor, AI analysis pipeline, MCP server, failure persistence + pattern detection, output router (PR comments, Slack), dashboard, CLI, and cloud deployment via EKS + Terraform.
 
 ---
 
 ## Phase 1: Adopt the Full-Stack FastAPI Template
 
-**Goal**: Get the template running locally, verify tests pass, integrate into the ADEP repo.
+**Goal**: Get the template running locally, verify tests pass, integrate into the CIFI repo. This becomes the foundation for the webhook receiver, API layer, and dashboard.
 
 **Steps**:
 1. Copy the template (pinned to release `0.10.0`) into the repo — `backend/`, `frontend/`, `compose.yml`, `compose.override.yml`, `.env`, `scripts/`, etc.
 2. Regenerate secrets in `.env` (`SECRET_KEY`, `POSTGRES_PASSWORD`, `FIRST_SUPERUSER_PASSWORD`)
 3. Run `docker compose up -d`, verify all services start
 4. Run existing tests: `docker compose exec backend pytest`
-5. Add a `/api/health` endpoint (needed for K8s probes later)
+5. Add a `/api/health` endpoint (needed for K8s probes and service health checks)
 6. Create a root `Makefile` with targets: `up`, `down`, `test-backend`, `test-e2e`, `logs`
-7. Update `README.md`
+7. Update `README.md` with CIFI branding and overview
 
 **Verification**:
 - All containers healthy (`docker compose ps` shows all services "Up")
@@ -33,134 +33,123 @@ Adopt the **full-stack-fastapi-template** (FastAPI + React + PostgreSQL + Docker
 
 ---
 
-## Phase 2: Kubernetes Deployment
+## Phase 2: Core Engine — Log Ingestion + AI Analysis
 
-**Goal**: Deploy the full stack (backend + frontend + PostgreSQL) on a local Kind cluster.
-
-**Steps**:
-1. `k8s/namespace.yaml` — dedicated `adep` namespace
-2. `k8s/postgres/` — StatefulSet + Service + PVC + Secret
-3. `k8s/backend/` — Deployment (liveness/readiness → `/api/health`) + Service + init container for Alembic migrations
-4. `k8s/frontend/` — Deployment + Service (built React app via nginx)
-5. `k8s/ingress.yaml` — Ingress routing `/api` → backend, `/` → frontend (replaces Traefik from Docker Compose)
-6. `k8s/secrets.yaml.example` — template only, never commit real values
-7. `k8s/kustomization.yaml` — Kustomize base
-8. Makefile targets: `k8s-cluster`, `k8s-deploy`, `k8s-status`, `k8s-port-forward`, `k8s-teardown`
-9. Build and `kind load docker-image` for backend + frontend
-
-**Verification**:
-- All pods `Running` in `adep` namespace, readiness probes pass
-- Login works via port-forward, DB migrations applied
-- `kubectl get pods -n adep` shows healthy pods for backend, frontend, postgres
-
-**Human Checkpoint**: Review K8s manifests (especially secrets handling), validate health probes.
-
----
-
-## Phase 3: CI/CD Pipeline (Enhanced GitHub Actions)
-
-**Goal**: Extend the template's existing CI with image builds, K8s validation, and registry push.
+**Goal**: Build the core CIFI engine that fetches CI logs, preprocesses them, and runs LLM-based root cause analysis.
 
 **Steps**:
-1. Review and adapt existing `.github/workflows/` from the template
-2. Add/extend jobs: **test-backend** → **test-frontend** → **build-images** → **push-images** (ghcr.io, `main` only) → **validate-k8s** (dry-run)
-3. Optional manual deploy workflow
-4. Document branch protection
-
-**Verification**:
-- Push triggers CI, all jobs pass
-- Images pushed to ghcr.io on merge to `main`
-- K8s manifests validated (no syntax errors)
-
-**Human Checkpoint**: Review workflows, push a test commit, verify on GitHub Actions tab.
-
----
-
-## Phase 4: Observability (Prometheus + Grafana)
-
-**Goal**: Instrument backend with metrics, add structured logging, deploy monitoring stack.
-
-**Steps**:
-1. Add `prometheus-fastapi-instrumentator` to backend deps → expose `/api/metrics`
-2. Add `structlog` for structured JSON logging (request_id, path, status, duration)
-3. Deploy `k8s/prometheus/` (scrape config targeting `/api/metrics`) + `k8s/grafana/` (provisioned dashboard JSON)
-4. Add metrics test + Makefile targets: `k8s-deploy-monitoring`, `k8s-port-forward-prometheus`, `k8s-port-forward-grafana`
-
-**Verification**:
-- `/api/metrics` returns Prometheus format
-- Prometheus UI shows backend as "UP" target
-- Grafana dashboard loads with request rate, latency percentiles, error rate panels
-- Structured JSON logs visible in `kubectl logs`
-
-**Human Checkpoint**: Review instrumentation, scrape config, Grafana dashboard, log output.
-
----
-
-## Phase 5: Data Ingestion Pipeline
-
-**Goal**: Modular pipeline integrated with the existing PostgreSQL database.
-
-**Steps**:
-1. Create `pipeline/` — `ingest.py` (fetch → validate → transform → store), `config.py`, tests, sample data
-2. Pipeline writes to the same Postgres DB → data visible through the existing API/UI
-3. `pipeline/Dockerfile` + `k8s/pipeline/job.yaml` (K8s Job for on-demand runs)
-4. Makefile targets: `pipeline-run`, `pipeline-test`, `k8s-pipeline-run`
-
-**Verification**:
-- Unit tests pass
-- Pipeline stores data in Postgres, queryable via the backend API
-- K8s Job completes successfully
-
-**Human Checkpoint**: Review pipeline architecture, DB schema impact, test coverage.
-
----
-
-## Phase 6: AI Failure Analyzer
-
-**Goal**: LLM-powered root-cause analysis from logs + metrics.
-
-**Steps**:
-1. Create `ai/` — `analyzer.py`, `prompts.py`, `config.py` (OpenAI-compatible, configurable base URL for Ollama/local)
-2. Returns structured JSON: `root_cause`, `severity`, `suggested_fixes`, `confidence`
-3. Tests with mocked HTTP responses, realistic failure fixtures (OOM, 5xx, timeout)
-4. Makefile targets: `ai-test`, `ai-analyze`
+1. Create `cifi/` package — the core engine, separate from the FastAPI `backend/`
+2. `cifi/ingestion.py` — Log Ingestion Engine: fetch raw CI logs, test output, git diff, PR context via GitHub REST API (`PyGithub`)
+3. `cifi/preprocessor.py` — Strip ANSI codes/timestamps, detect error boundaries, extract stack traces/assertion failures, truncate intelligently to fit LLM context window
+4. `cifi/analyzer.py` — AI Analysis Pipeline: structured prompt → Claude/OpenAI API → validated JSON output
+5. `cifi/prompts.py` — System and user prompt templates for the LLM
+6. `cifi/schemas.py` — Pydantic models for analysis output: `failure_type`, `confidence`, `root_cause`, `contributing_factors`, `suggested_fix`, `relevant_log_lines`, `recurring`, `similar_past_failures`
+7. `cifi/config.py` — LLM provider config (swappable via env: Claude, OpenAI, Ollama)
+8. Tests with mocked HTTP responses and realistic failure fixtures (test failures, build errors, infra errors, timeouts)
+9. Makefile targets: `cifi-test`, `cifi-analyze`
 
 **Verification**:
 - Mocked tests pass in CI (no API key needed)
-- Manual run with real API key returns structured analysis
+- Manual run with real API key returns structured JSON analysis matching the schema
 - `grep -r "API_KEY\|SECRET" --include="*.py"` → only env-var references
+- Preprocessor correctly strips noise and extracts error regions from sample logs
 
-**Human Checkpoint**: Review prompts, output schema, error handling, security.
+**Human Checkpoint**: Review prompts, output schema, preprocessor quality, error handling, security.
 
 ---
 
-## Phase 7: Developer CLI
+## Phase 3: GitHub Integration — Webhook Receiver + PR Comments
 
-**Goal**: Unified `adep` CLI tying all subsystems together.
+**Goal**: Connect CIFI to GitHub Actions so failures are automatically detected and analysis is posted back to PRs.
 
 **Steps**:
-1. Click-based CLI with commands: `adep up`, `adep deploy`, `adep status`, `adep logs`, `adep ingest`, `adep analyze`, `adep test`
-2. Each command wraps the corresponding subsystem
-3. Tests via Click test runner, installable via `pyproject.toml`
-4. Makefile targets: `cli-install`, `cli-test`
+1. Add webhook receiver endpoint to `backend/` — `POST /api/webhook/github` accepting `workflow_run` events
+2. Implement GitHub webhook signature verification (HMAC secret validation)
+3. Async processing — webhook returns 200 immediately, queues analysis via FastAPI background tasks
+4. Output Router: post analysis as a PR comment via GitHub API (Markdown formatted)
+5. Add ngrok config for local development (receive webhooks locally)
+6. Configure a test GitHub repo with a workflow that intentionally fails
+7. End-to-end test: push → failure → webhook → analysis → PR comment
+8. Makefile targets: `webhook-test`, `cifi-demo`
 
 **Verification**:
-- `adep --help` shows all commands
-- Full integration: `adep deploy && adep status && adep ingest && adep analyze`
+- Webhook endpoint validates GitHub signatures (rejects invalid requests)
+- Failed workflow triggers analysis automatically
+- PR comment appears with structured root cause summary
+- Invalid/unsigned webhook requests are rejected with 403
 
-**Human Checkpoint**: Review CLI UX, help text, test coverage.
+**Human Checkpoint**: Review webhook security, async flow, PR comment format, demo on real repo.
 
 ---
 
-## Phase 8 (Optional): Infrastructure as Code (Terraform)
+## Phase 4: Persistence + Pattern Detection — MVP Complete
 
-**Goal**: Terraform for provisioning K8s cluster + supporting infra.
+**Goal**: Store failure history in PostgreSQL, detect recurring patterns. This completes the MVP.
 
 **Steps**:
-1. `terraform/main.tf`, `variables.tf`, `outputs.tf`
-2. Modules for cluster + registry provisioning
+1. Alembic migration: add `failures` table (id, repo, run_id, branch, commit_sha, triggered_at, failure_type, confidence, root_cause, suggested_fix, raw_analysis_json)
+2. Alembic migration: add `failure_patterns` table (id, repo, pattern_hash, failure_type, first_seen, last_seen, occurrence_count, example_run_ids)
+3. `cifi/persistence.py` — Store analysis results, query history
+4. `cifi/patterns.py` — Hash-based recurring pattern detection (normalized error message + failure type → pattern_hash)
+5. API endpoints: `GET /api/failures` (list), `GET /api/failures/{id}` (detail), `GET /api/patterns/{repo}` (recurring patterns)
+6. Flag recurring failures in PR comments ("⚠️ This failure has occurred 5 times in the last 7 days")
+7. Tests for persistence and pattern detection logic
 
-**Verification**: `terraform validate` + `terraform plan` pass. Human approves before `apply`.
+**Verification**:
+- Failure records stored in DB after analysis
+- Recurring patterns detected when same error appears 3+ times
+- API returns failure history and pattern data
+- PR comments flag recurring failures
+
+**Human Checkpoint**: Review DB schema, pattern detection logic, API design. **MVP is complete here.**
+
+---
+
+## Phase 5: Infrastructure — Docker + EKS + Terraform
+
+**Goal**: Deploy CIFI on AWS EKS via Terraform. Legitimate cloud infrastructure experience.
+
+**Steps**:
+1. `k8s/namespace.yaml` — dedicated `cifi` namespace
+2. `k8s/backend/` — Deployment (liveness/readiness → `/api/health`) + Service + init container for Alembic migrations
+3. `k8s/frontend/` — Deployment + Service (built React app via nginx)
+4. `k8s/ingress.yaml` — Ingress routing, ALB for webhook endpoint
+5. `k8s/secrets.yaml.example` — template only, never commit real values
+6. `k8s/kustomization.yaml` — Kustomize base
+7. `terraform/` — VPC + subnets, EKS cluster (1 node group, t3.medium), RDS PostgreSQL (db.t3.micro), ECR, ALB, IAM roles
+8. Makefile targets: `k8s-deploy`, `k8s-status`, `terraform-plan`, `terraform-apply`
+
+**Verification**:
+- All pods Running in `cifi` namespace, readiness probes pass
+- Webhook endpoint accessible via ALB
+- `terraform validate` + `terraform plan` pass
+- End-to-end: GitHub failure → webhook to ALB → analysis → PR comment
+
+**Human Checkpoint**: Review K8s manifests, Terraform plan, security groups, IAM policies.
+
+---
+
+## Phase 6: Dashboard + CLI + MCP Server + Polish
+
+**Goal**: Add the web dashboard, CLI tool, MCP server, Slack integration, and polish for launch.
+
+**Steps**:
+1. **Dashboard**: Adapt the existing React frontend — recent failures list, recurring pattern tracker, per-repo failure rate chart, single failure detail view
+2. **CLI** (`cli/`): `cifi analyze <run_id>`, `cifi history <repo>`, `cifi patterns <repo>`, `cifi status`, `cifi watch` — Python + `typer`
+3. **MCP Server** (`cifi/mcp_server.py`): Expose tools — `analyze_failure(run_id)`, `get_failure_history(repo, days)`, `get_recurring_patterns(repo)`, `get_fix_suggestions(run_id)`
+4. **Slack integration**: Output Router sends failure summaries to a Slack channel via webhook
+5. **Observability**: Structured JSON logging, `/api/metrics` endpoint, basic Prometheus metrics (`failures_analyzed_total`, `analysis_latency_seconds`, `llm_errors_total`)
+6. **README**: Architecture diagram, demo GIF, install instructions, interview-ready documentation
+7. Makefile targets: `cli-install`, `cli-test`, `mcp-test`
+
+**Verification**:
+- Dashboard shows failure history and patterns
+- CLI commands work end-to-end
+- MCP tools callable from AI agent workflows
+- Slack messages delivered on failure
+- README makes a hiring manager stop scrolling
+
+**Human Checkpoint**: Review dashboard UX, CLI help text, MCP tool design, README quality. **Full version complete.**
 
 ---
 
@@ -171,27 +160,31 @@ Adopt the **full-stack-fastapi-template** (FastAPI + React + PostgreSQL + Docker
 | **Incremental delivery** | Each phase produces a working artifact. Never advance with broken tests. |
 | **Human-in-the-loop** | Pause after each phase for review/approval before advancing. |
 | **Test continuously** | Every phase adds tests. After Phase 3, CI runs them automatically on every push. |
-| **Start local, go remote** | Phases 1-2 are local. Phase 3 adds CI. Phase 8 (optional) adds cloud. |
-| **One concern at a time** | Don't mix K8s setup with observability. Isolation reduces debugging surface. |
+| **Start local, go remote** | Phases 1–4 are local. Phase 5 adds cloud. Phase 6 adds polish. |
+| **One concern at a time** | Don't mix analysis engine with infrastructure. Isolation reduces debugging surface. |
+| **Real over impressive** | Every component solves an actual problem. No padding. |
 
 ---
 
 ## Decisions
 
-- **full-stack-fastapi-template as the app** — production-realistic (FastAPI + React + PostgreSQL + JWT auth + email)
+- **full-stack-fastapi-template as the foundation** — production-realistic (FastAPI + React + PostgreSQL + JWT auth + email), reused for webhook receiver, API, and dashboard
 - **Copy (not fork) the template** — own the code, modify freely, pin to `0.10.0`
-- **Kind over Minikube** — lighter, Docker-native, better CI compatibility
+- **`cifi/` as the core engine package** — separate from the FastAPI `backend/` app, clean domain boundary
+- **Force JSON from LLM** — structured prompts + schema validation, never parse free-form text
+- **Hash-based pattern detection** — fast, cheap, deterministic (no LLM calls for comparison)
+- **Async webhook processing** — LLM calls are slow; return 200 immediately, analyze in background
+- **Claude API (primary), OpenAI-compatible (swappable)** — configurable via env, supports Ollama for local dev
+- **EKS + Terraform for production** — legitimate K8s + IaC experience
+- **MCP server** — differentiating layer that connects CIFI to AI agent workflows
 - **ghcr.io for container registry** — free for public repos, native GitHub Actions integration
-- **Replace Traefik with K8s Ingress** in Phase 2 (nginx-ingress, K8s-native routing)
-- **Alembic migrations as init container** in K8s (before backend starts)
-- **Pipeline writes to same Postgres** — data visible through existing API/UI
-- **Click for CLI** — composable commands, built-in test runner
-- **OpenAI-compatible API with configurable base URL** — supports Ollama for local dev
 
 ---
 
 ## Further Considerations
 
 1. **Template version pinning**: Pin to release `0.10.0` to avoid breaking changes. Pull updates selectively.
-2. **Traefik → Ingress transition**: Key architectural shift in Phase 2. Docker Compose uses Traefik; K8s uses nginx-ingress controller.
-3. **DB migrations in K8s**: Run Alembic as init container or pre-deploy Job — needs careful handling in Phase 2.
+2. **Log scrubbing**: Logs may contain sensitive data — add a scrubbing layer before sending to external LLM APIs.
+3. **LLM cost management**: Add per-repo rate limiting on analysis calls. LLM API calls are the primary cost center.
+4. **DB migrations in K8s**: Run Alembic as init container or pre-deploy Job — needs careful handling in Phase 5.
+5. **Webhook security**: GitHub HMAC signature verification on every incoming request — non-negotiable.
