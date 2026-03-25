@@ -2,154 +2,167 @@
 
 ## TL;DR
 
-Build an AI-powered CI failure analysis agent using the **full-stack-fastapi-template** (FastAPI + React + PostgreSQL + Docker Compose + JWT auth) as the application foundation. CIFI watches CI pipelines for failures, ingests logs and context, runs them through an LLM analysis pipeline, and delivers structured root cause summaries to developers via PR comments, Slack, or a web dashboard. Each phase is independently testable with explicit human checkpoints.
+Build an AI-powered CI failure analysis agent using a **two-tier architecture**:
 
-**What the template gives us for free**: Full-stack app with auth, Docker Compose, Traefik reverse proxy, Postgres, pre-commit hooks, pytest + Playwright tests, basic GitHub Actions CI, Alembic migrations, email-based password recovery via Mailcatcher.
+- **Tier 1 — GitHub Action**: Embedded in target repos. Reads logs + source code from the checkout, runs a hybrid analyzer (rule engine first, LLM fallback), posts PR comments. Zero infrastructure required — 3 lines of YAML.
+- **Tier 2 — Central Server** (optional): FastAPI + PostgreSQL on EKS. Aggregates failure data across repos, tracks recurring patterns, serves a dashboard, exposes MCP server + CLI.
 
-**What we build**: Webhook receiver, log ingestion engine, preprocessor, AI analysis pipeline, MCP server, failure persistence + pattern detection, output router (PR comments, Slack), dashboard, CLI, and cloud deployment via EKS + Terraform.
+Each phase is independently testable with explicit human checkpoints.
 
 ---
 
-## Phase 1: Adopt the Full-Stack FastAPI Template
+## Phase 1: Core Engine — Rule Engine + Preprocessor + Analyzer
 
-**Goal**: Get the template running locally, verify tests pass, integrate into the CIFI repo. This becomes the foundation for the webhook receiver, API layer, and dashboard.
+**Goal**: Build the `cifi/` Python package — the core analysis engine that works locally. This is the foundation for both tiers.
 
 **Steps**:
-1. Copy the template (pinned to release `0.10.0`) into the repo — `backend/`, `frontend/`, `compose.yml`, `compose.override.yml`, `.env`, `scripts/`, etc.
-2. Regenerate secrets in `.env` (`SECRET_KEY`, `POSTGRES_PASSWORD`, `FIRST_SUPERUSER_PASSWORD`)
-3. Run `docker compose up -d`, verify all services start
-4. Run existing tests: `docker compose exec backend pytest`
-5. Add a `/api/health` endpoint (needed for K8s probes and service health checks)
-6. Create a root `Makefile` with targets: `up`, `down`, `test-backend`, `test-e2e`, `logs`
-7. Update `README.md` with CIFI branding and overview
+1. Create `cifi/` package with clean module structure
+2. `cifi/rules.py` — Rule engine: 50+ regex patterns covering common CI failure modes (test failures, build errors, infra errors, config errors). Each rule has: pattern, failure_type, confidence, fix_template
+3. `cifi/preprocessor.py` — Strip ANSI codes/timestamps, detect error boundaries, extract stack traces and assertion failures, truncate intelligently to fit LLM context window
+4. `cifi/analyzer.py` — Hybrid analyzer: run rule engine first, fall back to LLM if no high-confidence match. Support multiple LLM providers (GitHub Models API, Claude, OpenAI, Ollama)
+5. `cifi/schemas.py` — Pydantic models: `AnalysisResult` (failure_type, confidence, root_cause, contributing_factors, suggested_fix, relevant_log_lines)
+6. `cifi/config.py` — Configuration: LLM provider, model, API keys via env vars
+7. `cifi/ingestion.py` — Log ingestion: read CI logs and source code from local filesystem (for Tier 1) or via GitHub API (for Tier 2)
+8. Tests with realistic failure fixtures (test failures, build errors, infra errors, timeouts)
+9. Root `Makefile` with targets: `test`, `lint`, `analyze-local`
 
 **Verification**:
-- All containers healthy (`docker compose ps` shows all services "Up")
-- `make test-backend` passes
-- Frontend loads at `http://localhost`; Swagger UI at `http://localhost/api/docs`
-- `/api/health` returns `{"status": "ok"}`
+- Rule engine correctly identifies common failure patterns from fixture logs
+- Preprocessor strips noise and extracts error regions
+- Hybrid analyzer uses rules when possible, falls back to LLM
+- All tests pass with mocked LLM responses (no API key needed)
+- Manual run with real API key returns valid `AnalysisResult`
 
-**Human Checkpoint**: Review structure, confirm app runs end-to-end, check `.env` for secrets.
+**Human Checkpoint**: Review rule patterns, preprocessor quality, prompt design, output schema.
 
 ---
 
-## Phase 2: Core Engine — Log Ingestion + AI Analysis
+## Phase 2: GitHub Action — Tier 1
 
-**Goal**: Build the core CIFI engine that fetches CI logs, preprocesses them, and runs LLM-based root cause analysis.
+**Goal**: Package the core engine as a GitHub Action. When a CI step fails, CIFI analyzes the failure and posts a PR comment.
 
 **Steps**:
-1. Create `cifi/` package — the core engine, separate from the FastAPI `backend/`
-2. `cifi/ingestion.py` — Log Ingestion Engine: fetch raw CI logs, test output, git diff, PR context via GitHub REST API (`PyGithub`)
-3. `cifi/preprocessor.py` — Strip ANSI codes/timestamps, detect error boundaries, extract stack traces/assertion failures, truncate intelligently to fit LLM context window
-4. `cifi/analyzer.py` — AI Analysis Pipeline: structured prompt → Claude/OpenAI API → validated JSON output
-5. `cifi/prompts.py` — System and user prompt templates for the LLM
-6. `cifi/schemas.py` — Pydantic models for analysis output: `failure_type`, `confidence`, `root_cause`, `contributing_factors`, `suggested_fix`, `relevant_log_lines`, `recurring`, `similar_past_failures`
-7. `cifi/config.py` — LLM provider config (swappable via env: Claude, OpenAI, Ollama)
-8. Tests with mocked HTTP responses and realistic failure fixtures (test failures, build errors, infra errors, timeouts)
-9. Makefile targets: `cifi-test`, `cifi-analyze`
+1. Create `action.yml` — GitHub Action metadata (name, description, inputs, runs)
+2. `action/entrypoint.py` — Main entry point: read CI logs, read source code from `$GITHUB_WORKSPACE`, run hybrid analyzer, post PR comment
+3. `action/Dockerfile` — Container Action image with cifi package installed
+4. PR comment formatting — Markdown template with failure type, root cause, suggested fix, relevant log lines, recurring warning
+5. GitHub API integration — Post PR comment using `GITHUB_TOKEN` (provided automatically)
+6. GitHub Models API integration — Free LLM fallback using `GITHUB_TOKEN`
+7. Create a test repo with intentionally failing workflows for E2E testing
+8. Publish Action to GitHub Marketplace
+9. Makefile targets: `action-build`, `action-test`
+
+**Usage**:
+```yaml
+- uses: alihaidar2950/cifi@v1
+  if: failure()
+  with:
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
 
 **Verification**:
-- Mocked tests pass in CI (no API key needed)
-- Manual run with real API key returns structured JSON analysis matching the schema
-- `grep -r "API_KEY\|SECRET" --include="*.py"` → only env-var references
-- Preprocessor correctly strips noise and extracts error regions from sample logs
+- Action triggers on CI failure in test repo
+- Rule engine catches common failures instantly (no LLM call)
+- LLM fallback works for complex failures
+- PR comment appears with structured analysis
+- Works without any secrets beyond `GITHUB_TOKEN`
 
-**Human Checkpoint**: Review prompts, output schema, preprocessor quality, error handling, security.
+**Human Checkpoint**: Review Action metadata, entrypoint, PR comment format, demo on real repo. **Tier 1 MVP complete.**
 
 ---
 
-## Phase 3: GitHub Integration — Webhook Receiver + PR Comments
+## Phase 3: Central API + Persistence — Tier 2 Foundation
 
-**Goal**: Connect CIFI to GitHub Actions so failures are automatically detected and analysis is posted back to PRs.
+**Goal**: Build the Tier 2 central server that receives and stores analysis results from Tier 1 instances.
 
 **Steps**:
-1. Add webhook receiver endpoint to `backend/` — `POST /api/webhook/github` accepting `workflow_run` events
-2. Implement GitHub webhook signature verification (HMAC secret validation)
-3. Async processing — webhook returns 200 immediately, queues analysis via FastAPI background tasks
-4. Output Router: post analysis as a PR comment via GitHub API (Markdown formatted)
-5. Add ngrok config for local development (receive webhooks locally)
-6. Configure a test GitHub repo with a workflow that intentionally fails
-7. End-to-end test: push → failure → webhook → analysis → PR comment
-8. Makefile targets: `webhook-test`, `cifi-demo`
+1. Set up FastAPI application in `backend/`
+2. PostgreSQL + SQLAlchemy + Alembic migration: `failures` table (id, repo, run_id, branch, commit_sha, triggered_at, failure_type, confidence, root_cause, suggested_fix, raw_analysis_json)
+3. Alembic migration: `failure_patterns` table (id, repo, pattern_hash, failure_type, first_seen, last_seen, occurrence_count, example_run_ids)
+4. `POST /api/failures` — Endpoint to receive analysis results from Tier 1 (JWT auth)
+5. `GET /api/failures` — List failures (filterable by repo, branch, date range)
+6. `GET /api/failures/{id}` — Single failure detail
+7. `GET /api/patterns/{repo}` — Recurring failure patterns
+8. `GET /api/health` — Health check for K8s probes
+9. Update Tier 1 Action to optionally POST results to Tier 2 (new input: `central-server-url`)
+10. Docker Compose for local development (cifi-api + postgres)
+11. Makefile targets: `server-up`, `server-down`, `server-test`
 
 **Verification**:
-- Webhook endpoint validates GitHub signatures (rejects invalid requests)
-- Failed workflow triggers analysis automatically
-- PR comment appears with structured root cause summary
-- Invalid/unsigned webhook requests are rejected with 403
+- API endpoints work end-to-end
+- Tier 1 Action successfully posts results to Tier 2
+- Failure records stored and queryable
+- Pattern detection flags recurring failures (occurrence_count >= 3)
 
-**Human Checkpoint**: Review webhook security, async flow, PR comment format, demo on real repo.
-
----
-
-## Phase 4: Persistence + Pattern Detection — MVP Complete
-
-**Goal**: Store failure history in PostgreSQL, detect recurring patterns. This completes the MVP.
-
-**Steps**:
-1. Alembic migration: add `failures` table (id, repo, run_id, branch, commit_sha, triggered_at, failure_type, confidence, root_cause, suggested_fix, raw_analysis_json)
-2. Alembic migration: add `failure_patterns` table (id, repo, pattern_hash, failure_type, first_seen, last_seen, occurrence_count, example_run_ids)
-3. `cifi/persistence.py` — Store analysis results, query history
-4. `cifi/patterns.py` — Hash-based recurring pattern detection (normalized error message + failure type → pattern_hash)
-5. API endpoints: `GET /api/failures` (list), `GET /api/failures/{id}` (detail), `GET /api/patterns/{repo}` (recurring patterns)
-6. Flag recurring failures in PR comments ("⚠️ This failure has occurred 5 times in the last 7 days")
-7. Tests for persistence and pattern detection logic
-
-**Verification**:
-- Failure records stored in DB after analysis
-- Recurring patterns detected when same error appears 3+ times
-- API returns failure history and pattern data
-- PR comments flag recurring failures
-
-**Human Checkpoint**: Review DB schema, pattern detection logic, API design. **MVP is complete here.**
+**Human Checkpoint**: Review API design, DB schema, Tier 1 → Tier 2 integration.
 
 ---
 
-## Phase 5: Infrastructure — Docker + EKS + Terraform
+## Phase 4: Dashboard + CLI + MCP Server
 
-**Goal**: Deploy CIFI on AWS EKS via Terraform. Legitimate cloud infrastructure experience.
-
-**Steps**:
-1. `k8s/namespace.yaml` — dedicated `cifi` namespace
-2. `k8s/backend/` — Deployment (liveness/readiness → `/api/health`) + Service + init container for Alembic migrations
-3. `k8s/frontend/` — Deployment + Service (built React app via nginx)
-4. `k8s/ingress.yaml` — Ingress routing, ALB for webhook endpoint
-5. `k8s/secrets.yaml.example` — template only, never commit real values
-6. `k8s/kustomization.yaml` — Kustomize base
-7. `terraform/` — VPC + subnets, EKS cluster (1 node group, t3.medium), RDS PostgreSQL (db.t3.micro), ECR, ALB, IAM roles
-8. Makefile targets: `k8s-deploy`, `k8s-status`, `terraform-plan`, `terraform-apply`
-
-**Verification**:
-- All pods Running in `cifi` namespace, readiness probes pass
-- Webhook endpoint accessible via ALB
-- `terraform validate` + `terraform plan` pass
-- End-to-end: GitHub failure → webhook to ALB → analysis → PR comment
-
-**Human Checkpoint**: Review K8s manifests, Terraform plan, security groups, IAM policies.
-
----
-
-## Phase 6: Dashboard + CLI + MCP Server + Polish
-
-**Goal**: Add the web dashboard, CLI tool, MCP server, Slack integration, and polish for launch.
+**Goal**: Add user-facing interfaces to Tier 2 — web dashboard, CLI tool, and MCP server.
 
 **Steps**:
-1. **Dashboard**: Adapt the existing React frontend — recent failures list, recurring pattern tracker, per-repo failure rate chart, single failure detail view
-2. **CLI** (`cli/`): `cifi analyze <run_id>`, `cifi history <repo>`, `cifi patterns <repo>`, `cifi status`, `cifi watch` — Python + `typer`
+1. **Dashboard** (React frontend): Recent failures list, recurring pattern tracker, per-repo failure rate chart, single failure detail view
+2. **CLI** (`cli/`): `cifi history <repo>`, `cifi patterns <repo>`, `cifi status` — Python + `typer`, talks to Tier 2 API
 3. **MCP Server** (`cifi/mcp_server.py`): Expose tools — `analyze_failure(run_id)`, `get_failure_history(repo, days)`, `get_recurring_patterns(repo)`, `get_fix_suggestions(run_id)`
 4. **Slack integration**: Output Router sends failure summaries to a Slack channel via webhook
-5. **Observability**: Structured JSON logging, `/api/metrics` endpoint, basic Prometheus metrics (`failures_analyzed_total`, `analysis_latency_seconds`, `llm_errors_total`)
-6. **README**: Architecture diagram, demo GIF, install instructions, interview-ready documentation
-7. Makefile targets: `cli-install`, `cli-test`, `mcp-test`
+5. Makefile targets: `cli-install`, `cli-test`, `mcp-test`
 
 **Verification**:
 - Dashboard shows failure history and patterns
 - CLI commands work end-to-end
 - MCP tools callable from AI agent workflows
 - Slack messages delivered on failure
-- README makes a hiring manager stop scrolling
 
-**Human Checkpoint**: Review dashboard UX, CLI help text, MCP tool design, README quality. **Full version complete.**
+**Human Checkpoint**: Review dashboard UX, CLI help text, MCP tool design.
+
+---
+
+## Phase 5: Infrastructure — EKS + Terraform
+
+**Goal**: Deploy Tier 2 on AWS EKS via Terraform. Legitimate cloud infrastructure experience.
+
+**Steps**:
+1. `k8s/namespace.yaml` — dedicated `cifi` namespace
+2. `k8s/backend/` — Deployment (liveness/readiness → `/api/health`) + Service + init container for Alembic migrations
+3. `k8s/frontend/` — Deployment + Service (built React app via nginx)
+4. `k8s/ingress.yaml` — Ingress routing, ALB for API endpoint
+5. `k8s/secrets.yaml.example` — template only, never commit real values
+6. `k8s/kustomization.yaml` — Kustomize base
+7. `terraform/` — VPC + subnets, EKS cluster (1 node group, t3.medium), RDS PostgreSQL (db.t3.micro), ECR, ALB, IAM roles
+8. Update Tier 1 Action docs with production Tier 2 URL configuration
+9. Makefile targets: `k8s-deploy`, `k8s-status`, `terraform-plan`, `terraform-apply`
+
+**Verification**:
+- All pods Running in `cifi` namespace, readiness probes pass
+- Tier 2 API accessible via ALB
+- `terraform validate` + `terraform plan` pass
+- End-to-end: GitHub failure → Tier 1 analysis → POST to Tier 2 → dashboard updated
+
+**Human Checkpoint**: Review K8s manifests, Terraform plan, security groups, IAM policies.
+
+---
+
+## Phase 6: Polish + Launch
+
+**Goal**: Production-ready polish, documentation, and launch.
+
+**Steps**:
+1. **Observability**: Structured JSON logging, `/api/metrics` endpoint, Prometheus metrics (`failures_analyzed_total`, `analysis_latency_seconds`, `rule_engine_hit_rate`, `llm_fallback_count`)
+2. **README**: Architecture diagram, demo GIF, install instructions (3-line quick start), interview-ready documentation
+3. **Action README**: Marketplace listing, all inputs/outputs documented, examples
+4. **Demo video**: Record a real CI failure → CIFI analysis → PR comment flow
+5. **Blog post**: Technical write-up of the two-tier design and hybrid analysis approach
+6. **Security hardening**: Log scrubbing before LLM, rate limiting, input validation audit
+
+**Verification**:
+- README makes a hiring manager stop scrolling
+- Demo GIF shows real failure → analysis → fix cycle
+- All tests pass in CI
+- Security review complete
+
+**Human Checkpoint**: Review README quality, demo, blog draft. **Full version complete.**
 
 ---
 
@@ -157,34 +170,43 @@ Build an AI-powered CI failure analysis agent using the **full-stack-fastapi-tem
 
 | Principle | How |
 |---|---|
+| **Tier 1 first** | Deliver value with zero infrastructure before adding complexity |
 | **Incremental delivery** | Each phase produces a working artifact. Never advance with broken tests. |
 | **Human-in-the-loop** | Pause after each phase for review/approval before advancing. |
-| **Test continuously** | Every phase adds tests. After Phase 3, CI runs them automatically on every push. |
-| **Start local, go remote** | Phases 1–4 are local. Phase 5 adds cloud. Phase 6 adds polish. |
-| **One concern at a time** | Don't mix analysis engine with infrastructure. Isolation reduces debugging surface. |
+| **Test continuously** | Every phase adds tests. CI runs them automatically on every push. |
+| **Progressive complexity** | Phase 1-2 = no infra. Phase 3-4 = Docker. Phase 5 = cloud. |
 | **Real over impressive** | Every component solves an actual problem. No padding. |
 
 ---
 
 ## Decisions
 
-- **full-stack-fastapi-template as the foundation** — production-realistic (FastAPI + React + PostgreSQL + JWT auth + email), reused for webhook receiver, API, and dashboard
-- **Copy (not fork) the template** — own the code, modify freely, pin to `0.10.0`
-- **`cifi/` as the core engine package** — separate from the FastAPI `backend/` app, clean domain boundary
-- **Force JSON from LLM** — structured prompts + schema validation, never parse free-form text
-- **Hash-based pattern detection** — fast, cheap, deterministic (no LLM calls for comparison)
-- **Async webhook processing** — LLM calls are slow; return 200 immediately, analyze in background
-- **Claude API (primary), OpenAI-compatible (swappable)** — configurable via env, supports Ollama for local dev
-- **EKS + Terraform for production** — legitimate K8s + IaC experience
-- **MCP server** — differentiating layer that connects CIFI to AI agent workflows
-- **ghcr.io for container registry** — free for public repos, native GitHub Actions integration
+| Decision | Rationale |
+|---|---|
+| **Two-tier architecture** | Tier 1 solves the context problem (full checkout), Tier 2 adds aggregation |
+| **GitHub Action as Tier 1** | Zero infra, marketplace distribution, 3-line adoption |
+| **Hybrid analysis (rules + LLM)** | 70% of failures resolved instantly for free by rule engine |
+| **GitHub Models API** | Free LLM access via GITHUB_TOKEN — no API key needed |
+| **FastAPI for Tier 2** | Lightweight, async, well-suited for API + dashboard serving |
+| **`cifi/` as core package** | Shared between Tier 1 (Action) and Tier 2 (server), clean domain boundary |
+| **Force JSON from LLM** | Structured prompts + schema validation, never parse free-form text |
+| **Hash-based pattern detection** | Fast, cheap, deterministic (no LLM calls for comparison) |
+| **EKS + Terraform for Tier 2** | Legitimate K8s + IaC experience on the resume |
+| **MCP server in Tier 2** | Differentiating — pluggable into AI agent workflows |
+| **Tier 2 optional** | Immediate value with Action alone, teams opt into central server |
 
 ---
 
-## Further Considerations
+## Project Structure
 
-1. **Template version pinning**: Pin to release `0.10.0` to avoid breaking changes. Pull updates selectively.
-2. **Log scrubbing**: Logs may contain sensitive data — add a scrubbing layer before sending to external LLM APIs.
-3. **LLM cost management**: Add per-repo rate limiting on analysis calls. LLM API calls are the primary cost center.
-4. **DB migrations in K8s**: Run Alembic as init container or pre-deploy Job — needs careful handling in Phase 5.
-5. **Webhook security**: GitHub HMAC signature verification on every incoming request — non-negotiable.
+```
+cifi/               # Core engine: rules, preprocessor, analyzer, schemas
+action/             # GitHub Action: entrypoint, Dockerfile, action.yml
+backend/            # Tier 2 FastAPI server (Phase 3+)
+frontend/           # Tier 2 React dashboard (Phase 4+)
+cli/                # Developer CLI (Phase 4+)
+k8s/                # Kubernetes manifests (Phase 5)
+terraform/          # AWS EKS + supporting infra (Phase 5)
+docs/               # Design docs: HLD, DD, Plan, North Star
+.github/            # Copilot instructions, PR workflow, CI
+```
