@@ -1,32 +1,35 @@
 # CIFI — Copilot Instructions
 
-This is **CI Failure Intelligence (CIFI)** — an AI-powered CI failure analysis agent. It uses the `fastapi/full-stack-fastapi-template` (pinned to 0.10.0) as the application foundation — FastAPI + React + PostgreSQL + Docker Compose + JWT auth.
+This is **CI Failure Intelligence (CIFI)** — an AI-powered CI failure analysis agent with a two-tier architecture:
+
+- **Tier 1 — GitHub Action**: Embedded in target repos. Reads logs + source code from the checkout, runs hybrid analysis (rule engine first, LLM fallback), posts PR comments. Zero infrastructure.
+- **Tier 2 — Central Server** (optional): FastAPI + PostgreSQL on EKS. Aggregates data across repos, dashboard, MCP server, CLI.
 
 ## Key Docs
 - `docs/PLAN.md` — Full phased implementation plan (6 phases)
-- `docs/HLD.md` — High-level architecture
+- `docs/HLD.md` — Two-tier architecture design
 - `docs/DD.md` — Detailed design (component-level)
 - `docs/NORTH_STAR.md` — Vision and success criteria
 - `.github/instrctions/pr-instructions.md` — Agent workflow for commit, push, and pull request actions
 
 ## Current Phase
-Phase 1 — Adopt Full-Stack FastAPI Template
+Phase 1 — Core Engine (rule engine + preprocessor + analyzer)
 
 ## Project Structure
-- `backend/` — FastAPI app (webhook receiver, API layer, from template)
-- `frontend/` — React + TypeScript app (dashboard, from template)
-- `cifi/` — Core engine: log ingestion, preprocessor, AI analyzer, patterns (Phase 2+)
-- `cli/` — Developer CLI: `cifi analyze`, `cifi history`, etc. (Phase 6)
+- `cifi/` — Core engine: rule engine, preprocessor, analyzer, schemas (shared by both tiers)
+- `action/` — GitHub Action: entrypoint, Dockerfile, action.yml (Tier 1)
+- `backend/` — Tier 2 FastAPI server (Phase 3+)
+- `frontend/` — Tier 2 React dashboard (Phase 4+)
+- `cli/` — Developer CLI: `cifi history`, `cifi patterns`, etc. (Phase 4+)
 - `k8s/` — Kubernetes manifests (Phase 5)
 - `terraform/` — IaC for AWS EKS + supporting infra (Phase 5)
 
 ## Conventions
 - All commands go through the root `Makefile`
+- Two-tier: Tier 1 (GitHub Action) works alone, Tier 2 (Central Server) is optional
+- Hybrid analysis: rule engine first (free, instant), LLM fallback for complex failures
 - K8s manifests use Kustomize, deployed to `cifi` namespace
-- No secrets hardcoded — use env vars and K8s Secrets
+- No secrets hardcoded — use env vars, GitHub Actions secrets, and K8s Secrets
 - Test every phase before advancing to the next
-- Python code uses FastAPI patterns from the template
-- Backend tests: pytest; Frontend tests: Playwright
 - Force JSON output from LLM — always validate against Pydantic schema
-- Async webhook processing — return 200 immediately, analyze in background
 - When user requests push or PR actions, follow `.github/instrctions/pr-instructions.md`
