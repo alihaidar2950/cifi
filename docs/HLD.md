@@ -5,9 +5,9 @@
 CIFI is an **AI-powered CI failure analysis agent** built on a two-tier architecture with a **hybrid AI analysis core**:
 
 - **Tier 1 — GitHub Action** (embedded in target repos): Runs inside the CI pipeline itself, has full access to source code, logs, and test output. Performs hybrid analysis (rule engine first, multi-provider LLM fallback) and posts results as PR comments. Zero infrastructure required — just add the Action to your workflow.
-- **Tier 2 — Lightweight API** (optional, deployed via Docker): Exposes the hybrid analyzer as a REST API for on-demand analysis outside of CI. Simple deployment on a managed platform.
+- **Tier 2 — Backend API** (optional, deployed via Docker): A real FastAPI backend with PostgreSQL persistence, API key auth, failure history, and pattern detection. Receives results from Tier 1 Actions, stores them, detects recurring patterns, and exposes a RESTful API.
 
-The core AI engineering is in the **hybrid analysis engine**: a two-stage architecture that combines deterministic pattern matching (50+ rules, instant, free) with multi-provider LLM intelligence (Claude, OpenAI, GitHub Models, Ollama) for complex failures. This isn't just "call an LLM" — it's a production-grade AI system with structured prompting, output validation, provider abstraction, and intelligent cost optimization.
+The core AI engineering is in the **hybrid analysis engine**: a two-stage architecture that combines deterministic pattern matching (50+ rules, instant, free) with multi-provider LLM intelligence (Claude, OpenAI, GitHub Models, Ollama) for complex failures. The backend engineering is in **Tier 2**: a production-grade API with database persistence, authentication, and algorithmic pattern detection.
 
 ---
 
@@ -72,13 +72,16 @@ The core AI engineering is in the **hybrid analysis engine**: a two-stage archit
                                       ▼
 
                     ┌─────────────────────────────────────────────┐
-                    │       TIER 2 — Lightweight API               │
+                    │       TIER 2 — Backend API                  │
                     │       (Docker + managed platform)            │
                     │                                             │
                     │  ┌──────────────────────────────────────┐   │
-                    │  │  FastAPI                              │   │
-                    │  │  POST /api/analyze (hybrid analyzer)  │   │
-                    │  │  GET /api/health                      │   │
+                    │  │  FastAPI + PostgreSQL                    │   │
+                    │  │  POST /api/analyze (hybrid analyzer)      │   │
+                    │  │  GET  /api/failures (history + filtering) │   │
+                    │  │  GET  /api/patterns (recurring failures)  │   │
+                    │  │  GET  /api/health                        │   │
+                    │  │  API key auth • SQLAlchemy ORM • Alembic  │   │
                     │  └──────────────────────────────────────┘   │
                     └─────────────────────────────────────────────┘
 ```
@@ -123,24 +126,27 @@ The critical insight: a webhook-based server can only access what the GitHub API
 
 ---
 
-## Tier 2 — Lightweight API
+## Tier 2 — Backend API
 
 ### What It Does
-A simple FastAPI service deployed via Docker that exposes the hybrid analyzer as a REST API. Accepts log payloads, runs the same analysis engine, returns structured results.
+A real FastAPI backend service with PostgreSQL persistence. Receives analysis results from Tier 1 Actions (or runs on-demand analysis), stores failure history, detects recurring patterns across repos, and exposes a RESTful API with pagination, filtering, and authentication.
 
-### Why Simple
-The value of CIFI is in the AI analysis engine, not the infrastructure it runs on. A Docker container on Fly.io/Railway/Cloud Run gives us a live, accessible API without infrastructure complexity. This keeps the focus on the AI engineering and product quality.
+### Why a Real Backend
+A health-check-only API proves nothing. A backend with database persistence, authentication, query filtering, and pattern detection demonstrates real backend engineering: database design, ORM usage, migration management, API design, auth middleware, and async Python.
 
 ### Components
-1. **FastAPI API** — `POST /api/analyze` (runs hybrid analyzer), `GET /api/health`
-2. **Docker container** — Single image, deployable anywhere
-3. **CI/CD** — GitHub Actions: test → build → deploy on push to main
-4. **Structured logging** — JSON logs for debugging
+1. **FastAPI API** — RESTful endpoints: analyze, list failures, get failure detail, list patterns, health check
+2. **PostgreSQL** — Failure history storage, pattern tracking
+3. **SQLAlchemy ORM** — Async ORM with `asyncpg`, proper model design
+4. **Alembic** — Database schema migrations
+5. **API Key Auth** — Middleware-based authentication for all endpoints
+6. **Pattern Detection** — Hash-based recurring failure identification (SHA-256 of normalized error + failure type)
+7. **Docker** — Multi-stage Dockerfile, Docker Compose for local dev (API + PostgreSQL)
+8. **CI/CD** — GitHub Actions: test → build → migrate → deploy
 
 ### Deferred Components
-These add value but are separate projects:
-- Deep infrastructure (EKS, Terraform modules, Kustomize overlays, Prometheus/Grafana)
-- PostgreSQL persistence + failure pattern tracking
+These are separate projects:
+- Deep infrastructure (EKS, Terraform, Kustomize, Prometheus/Grafana)
 - React web dashboard
 - MCP server for AI agent integration
 - CLI tool, Slack integration
@@ -234,13 +240,18 @@ Provider-agnostic LLM analysis for complex failures:
 Delivers analysis results:
 - **PR Comment** (Tier 1): Markdown summary posted via GitHub API
 - **Terminal** (local): Rich terminal output for local runs
-- **API** (Tier 2): JSON response for API consumers
+- **Tier 2 API** (optional): POSTs result to backend for storage and pattern tracking
 
-### 6. Lightweight API (Phase 3)
-FastAPI service deployed via Docker:
-- `POST /api/analyze` — accepts log payload, runs hybrid analyzer, returns result
-- `GET /api/health` — health check
-- Structured JSON logging
+### 6. Backend API (Phase 3)
+FastAPI service with PostgreSQL:
+- `POST /api/analyze` — accepts log payload, runs hybrid analyzer, stores result, returns analysis
+- `GET /api/failures` — list stored failures with pagination + filtering (repo, branch, date range)
+- `GET /api/failures/{id}` — single failure detail
+- `GET /api/patterns` — recurring failure patterns (hash-based detection)
+- `GET /api/health` — health check with DB connectivity status
+- API key authentication middleware
+- SQLAlchemy async ORM + Alembic migrations
+- Structured JSON logging with request IDs
 
 ---
 
@@ -253,20 +264,21 @@ The GitHub Action runs in GitHub's hosted runners. No infrastructure to manage. 
 ```
 Docker Compose
 ├── cifi-api          (FastAPI app)
-└── (optional) postgres (for future persistence)
+└── postgres          (PostgreSQL database)
 ```
 
 ### Tier 2 — Production
 ```
 Docker container deployed to managed platform:
 ├── Fly.io / Railway / Cloud Run
+├── Managed PostgreSQL (Fly Postgres / Railway / Cloud SQL)
 ├── HTTPS (automatic)
 ├── Health checks
 ├── Environment variables for config
-└── GitHub Actions CI/CD: test → build → deploy
+└── GitHub Actions CI/CD: test → build → migrate → deploy
 ```
 
-No VPCs, no EKS clusters, no Terraform modules. The AI engine is the product — deploy it simply.
+No VPCs, no EKS clusters, no Terraform modules. Deploy simply — the AI engine and backend design are the product.
 
 ---
 
@@ -288,12 +300,19 @@ No VPCs, no EKS clusters, no Terraform modules. The AI engine is the product —
 12. Developer reads 3-line summary, fixes issue in 5 minutes
 ```
 
-### Tier 2 API (On-Demand Analysis)
+### Tier 2 API (On-Demand Analysis + Persistence)
 ```
-1. Client POSTs log payload to /api/analyze
-2. Preprocessor extracts error region
-3. Hybrid analyzer runs (rules → LLM fallback)
-4. Returns structured AnalysisResult JSON
+1. Client authenticates with API key
+2. Client POSTs log payload to /api/analyze
+3. Preprocessor extracts error region
+4. Hybrid analyzer runs (rules → LLM fallback)
+5. Result stored in PostgreSQL (failures table)
+6. Pattern detector checks for recurring failures (hash match)
+7. Returns structured AnalysisResult JSON
+
+Querying history:
+8. Client GETs /api/failures?repo=X&branch=Y&page=1
+9. Returns paginated failure list with metadata
 ```
 
 ---
@@ -304,8 +323,9 @@ No VPCs, no EKS clusters, no Terraform modules. The AI engine is the product —
 - LLM API keys (if using paid providers) stored as GitHub Actions secrets
 - Logs may contain sensitive data — scrubbing layer before sending to external LLM APIs
 - Rule engine runs entirely locally — no data leaves the runner
-- API authentication via API keys for Tier 2 (if deployed)
+- API key authentication for Tier 2 endpoints
 - Input validation on all API endpoints
+- Rate limiting on analysis endpoints
 
 ---
 
@@ -317,7 +337,8 @@ No VPCs, no EKS clusters, no Terraform modules. The AI engine is the product —
 | **Multi-provider LLM** | Protocol-based abstraction | Vendor-agnostic, extensible, real AI engineering pattern |
 | **Structured prompting** | JSON enforcement + Pydantic | Production-grade LLM integration, not notebook demos |
 | **Embedded in CI** | GitHub Action, not webhook | Solves the context problem — full checkout access |
-| **Simple deployment** | Docker + managed platform | The AI engine is the product. Deploy simply, focus on the AI. |
-| **Two-tier architecture** | Action + optional API | GitHub Action for CI, API for on-demand. Each works independently. |
+| **Simple deployment** | Docker + managed platform | Deploy simply. The AI engine and backend design are the product. |
+| **Two-tier architecture** | Action + optional backend API | GitHub Action for CI, backend API for history/patterns/on-demand. |
 | **Force JSON from LLM** | Yes | Reliable parsing; no prompt-output ambiguity |
 | **Pattern detection** | Hash-based, not LLM-based | Fast, cheap, deterministic |
+| **PostgreSQL persistence** | Real database, not in-memory | Backend engineering signal: schema design, migrations, ORM |

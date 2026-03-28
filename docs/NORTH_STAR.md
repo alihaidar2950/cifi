@@ -47,12 +47,13 @@ This project exists to solve a real problem **and** to demonstrate AI engineerin
 |---|---|
 | Demonstrate AI engineering skills | Hybrid AI architecture, multi-provider LLM integration, structured prompting, output validation |
 | Show production-grade AI systems | Not a notebook demo — provider abstraction, retry logic, cost optimization, schema enforcement |
-| Escape QA/embedded framing | AI-powered developer tool, not test execution |
+| Demonstrate backend engineering | Real API with PostgreSQL, SQLAlchemy, Alembic migrations, API key auth, pagination, filtering |
+| Escape QA/embedded framing | AI-powered developer tool with a real backend, not test execution |
 | Ship a real product | GitHub Marketplace Action with real users and real value |
 | GitHub Actions expertise | Custom Action published to marketplace |
 | Public proof of skills | Fully open-source, demoable, yours to own in interviews |
-| Target AI / DevProd roles | Directly solves a Developer Experience problem with AI |
-| Progressive architecture | Hybrid analysis → GitHub Action → API → real adoption |
+| Target Backend / AI / DevProd roles | AI engine + real backend service + developer tool = multiple role signals |
+| Progressive architecture | Hybrid analysis → GitHub Action → Backend API → real adoption |
 
 ---
 
@@ -70,21 +71,26 @@ This project exists to solve a real problem **and** to demonstrate AI engineerin
 - [ ] Works on any repo — just add the Action to a workflow
 - [ ] Published to GitHub Marketplace
 
-### Phase 3 — Deployment
-- [ ] FastAPI API exposing the hybrid analyzer as a REST endpoint
+### Phase 3 — Backend API
+- [ ] FastAPI API with RESTful design: analyze, list failures, get detail, list patterns
+- [ ] PostgreSQL persistence with SQLAlchemy async ORM
+- [ ] Alembic database migrations
+- [ ] API key authentication middleware
+- [ ] Pagination and filtering on list endpoints
+- [ ] Hash-based recurring failure pattern detection
 - [ ] Docker container deployed to a managed platform (Fly.io / Railway / Cloud Run)
-- [ ] CI/CD pipeline: test → build → deploy on push to main
-- [ ] Health check endpoint, structured logging
+- [ ] Managed PostgreSQL in production
+- [ ] CI/CD pipeline: test → build → migrate → deploy on push to main
+- [ ] Health check endpoint with DB connectivity status
 
 ### Phase 4 — Adoption
 - [ ] Clean README with demo GIF, architecture diagram, clear quick start
 - [ ] At least 3 repos using CIFI with real failure analyses
 - [ ] Blog post about the hybrid AI analysis approach
-- [ ] You can explain the AI architecture, prompt design, and provider abstraction in any interview
+- [ ] You can explain the AI architecture, prompt design, backend API design, and database schema in any interview
 
 ### Deferred (Future)
 - [ ] Deep infrastructure (EKS, Terraform, Kustomize, Prometheus/Grafana)
-- [ ] Central aggregation server (FastAPI + PostgreSQL persistence)
 - [ ] Web dashboard showing failure history and trends
 - [ ] CLI tool (`cifi history`, `cifi patterns`, `cifi status`)
 - [ ] MCP server for AI agent integration
@@ -98,7 +104,7 @@ This project exists to solve a real problem **and** to demonstrate AI engineerin
 - Not an infrastructure showcase — deploy simply, focus on the AI
 - Not a general-purpose AI coding assistant
 - Not a replacement for writing good tests
-- Not over-engineered — Tier 1 is a single Action, Tier 2 is a single Docker container
+- Not over-engineered — Tier 1 is a single Action, Tier 2 is a FastAPI service with PostgreSQL
 
 Scope discipline is a feature. A sharp tool beats a sprawling one every time.
 
@@ -107,6 +113,8 @@ Scope discipline is a feature. A sharp tool beats a sprawling one every time.
 ## Guiding Principles
 
 **AI engineering, not AI wrapper.** This isn't "pipe logs to ChatGPT." It's a hybrid system with rule engines, structured prompting, provider abstraction, output validation, and cost optimization.
+
+**Backend engineering, not toy API.** Tier 2 has a real database, real auth, real persistence, and real pattern detection. Not just a health check endpoint.
 
 **Real over impressive.** Every component should solve an actual problem, not exist to pad the architecture diagram.
 
@@ -139,9 +147,12 @@ Scope discipline is a feature. A sharp tool beats a sprawling one every time.
 | **Pydantic** | Schema validation for LLM output. Production-grade structured output. |
 | **Structured Prompting** | JSON format enforcement, role definitions, context prioritization. Not "summarize this." |
 | **GitHub Actions** | Tier 1 runs here — full repo context, marketplace distribution, free for public repos |
-| **FastAPI** | Lightweight API for Tier 2 — async, well-suited for LLM integration |
+| **FastAPI** | Backend API — async, production-grade, well-suited for both LLM integration and REST APIs |
+| **PostgreSQL** | Proven relational database for failure history and pattern tracking |
+| **SQLAlchemy** | Async ORM with strong typing. Production-standard Python database layer. |
+| **Alembic** | Database schema migrations. Standard practice for real backends. |
 | **Docker** | Simple containerization. Deploy anywhere. |
-| **Fly.io / Railway** | Managed platforms — HTTPS, health checks, scaling out of the box. No infra complexity. |
+| **Fly.io / Railway** | Managed platforms — HTTPS, health checks, managed Postgres, scaling out of the box. |
 
 ---
 
@@ -151,7 +162,7 @@ Scope discipline is a feature. A sharp tool beats a sprawling one every time.
 |---|---|---|
 | 1 — Core Engine | Rule engine + preprocessor + hybrid analyzer | **AI engineering: hybrid architecture, multi-provider LLM, structured prompting, Pydantic validation** |
 | 2 — GitHub Action | Tier 1 published, works on real repos, posts PR comments | GitHub Actions, Docker, CI/CD, product shipping |
-| 3 — Deploy + API | Lightweight API deployed, live and accessible | FastAPI, Docker, deployment, CI/CD |
+| 3 — Backend API | FastAPI + PostgreSQL + auth + pattern detection, deployed | **Backend engineering: API design, database, ORM, migrations, auth** |
 | 4 — Adoption | Real users, blog post, demo, marketplace traction | **Product ownership, real-world AI tool with users** |
 
 ---
@@ -164,7 +175,7 @@ CIFI is done when:
 - Complex failures get accurate LLM analysis via free GitHub Models API (with Claude/OpenAI/Ollama as configurable alternatives)
 - All LLM output is validated against Pydantic schemas — no unstructured text
 - The hybrid analyzer demonstrates real AI engineering: provider abstraction, structured prompting, cost optimization, retry logic
-- A lightweight API is deployed and accessible at a public URL
+- A backend API is deployed with PostgreSQL persistence, API key auth, failure history, and pattern detection
 - At least 3 real repos are using CIFI with real failure analyses
-- You can demo it live in an interview and explain the AI architecture, prompt design, and multi-provider integration
+- You can demo it live in an interview and explain the AI architecture, prompt design, API design, and database schema
 - The GitHub repo has a README that makes a developer want to try it immediately

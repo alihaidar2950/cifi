@@ -6,12 +6,12 @@ Build an AI-powered CI failure analysis tool — a real AI engineering product w
 
 - **Phase 1 — Core Engine**: Python package with hybrid AI analysis (rule engine + multi-provider LLM fallback). Structured prompting, Pydantic validation, provider-agnostic architecture. **The AI engineering showcase.**
 - **Phase 2 — GitHub Action**: Package the engine as a GitHub Action. 3 lines of YAML, instant value. Publish to Marketplace. **Ship the product.**
-- **Phase 3 — Deploy + API**: Lightweight FastAPI service deployed via Docker on a simple cloud platform (Fly.io / Railway / Cloud Run). Just enough to have a live endpoint.
+- **Phase 3 — Backend API + Persistence**: Real FastAPI backend with PostgreSQL, API key auth, failure history, pattern detection. Deployed via Docker on a managed platform. **The backend engineering showcase.**
 - **Phase 4 — Adoption + Growth**: Real users, blog post, demo content, marketplace traction. **Prove it solves a real problem.**
 
-Phases 1-2 prove you can design and build AI-powered developer tools. Phase 3 proves you can ship. Phase 4 proves the product works in the real world.
+Phases 1-2 prove you can design AI-powered tools. Phase 3 proves you can build and deploy a real backend service. Phase 4 proves the product works in the real world.
 
-**Deferred:** Deep infrastructure (EKS, Terraform modules, Kustomize overlays, Prometheus/Grafana), React dashboard, MCP server, CLI, Slack integration. These add operational complexity without adding AI engineering signal — build later if needed.
+**Deferred:** Deep infrastructure (EKS, Terraform modules, Kustomize overlays, Prometheus/Grafana), React dashboard, MCP server, CLI, Slack integration. These add operational complexity without core engineering signal — build later if needed.
 
 ---
 
@@ -87,40 +87,60 @@ Phases 1-2 prove you can design and build AI-powered developer tools. Phase 3 pr
 
 ---
 
-## Phase 3: Deploy + API
+## Phase 3: Backend API + Persistence
 
-**Goal**: Deploy a lightweight FastAPI service that exposes the hybrid analyzer as an API. Simple Docker-based deployment on a managed platform — no complex infrastructure.
+**Goal**: Build a real FastAPI backend service with PostgreSQL persistence, API key authentication, failure history, and pattern detection. Deploy via Docker on a managed platform. This is a real backend — not a thin wrapper.
 
 **Steps**:
 
-### 3a. Minimal API
-1. Simple FastAPI app in `backend/` — `GET /api/health`, `POST /api/analyze` (accepts log payload, runs hybrid analyzer, returns result)
-2. Dockerfile for the API
-3. Docker Compose for local development
-4. Basic request validation and rate limiting
-5. Structured JSON logging
-6. Makefile targets: `api-build`, `api-run`, `api-test`
+### 3a. API Service
+1. FastAPI app in `backend/` with proper project structure (routers, services, models, database)
+2. `POST /api/analyze` — accepts log payload, runs hybrid analyzer, stores result, returns analysis
+3. `GET /api/failures` — list stored failures with pagination, filtering by repo/branch/date range
+4. `GET /api/failures/{id}` — single failure detail
+5. `GET /api/patterns` — recurring failure patterns across repos
+6. `GET /api/health` — health check (DB connectivity + service status)
+7. API key authentication middleware — secure all endpoints
+8. Request validation, rate limiting, proper HTTP status codes and error responses
+9. Structured JSON logging with request IDs for traceability
+10. Makefile targets: `api-build`, `api-run`, `api-test`
 
-### 3b. Deployment
-1. Deploy Docker container to Fly.io, Railway, or Cloud Run (pick simplest)
-2. Environment variables for LLM provider config
-3. Health check endpoint for platform monitoring
-4. HTTPS via platform (automatic on Fly.io/Railway/Cloud Run)
-5. GitHub Actions workflow: test → build → deploy on push to main
+### 3b. Database + Persistence
+1. PostgreSQL database for failure history
+2. SQLAlchemy ORM with async support (`asyncpg`)
+3. Alembic migrations for schema management
+4. Database models: `failures` table (analysis results + metadata), `patterns` table (recurring failures)
+5. Pattern detection: hash-based matching (SHA-256 of normalized error + failure type), flag when `occurrence_count >= 3`
+6. Docker Compose for local dev (API + PostgreSQL)
 
-### 3c. CI/CD
-1. GitHub Actions workflow for the API: lint → test → Docker build → deploy
-2. Automated deployment on merge to main
-3. Health check verification after deploy
+### 3c. Deployment + CI/CD
+1. Dockerfile (multi-stage build) for the API
+2. Deploy to Fly.io, Railway, or Cloud Run (pick simplest)
+3. Managed PostgreSQL via platform (Fly Postgres / Railway Postgres / Cloud SQL)
+4. Environment variables for DB connection, LLM config, API keys
+5. HTTPS via platform (automatic)
+6. GitHub Actions workflow: lint → test → Docker build → deploy
+7. Database migration step in CI/CD pipeline
+8. Health check verification after deploy
+
+**Backend Engineering Highlights**:
+- RESTful API design with proper resource modeling
+- PostgreSQL + SQLAlchemy async ORM + Alembic migrations
+- API key authentication middleware
+- Pagination, filtering, error handling patterns
+- Database-backed pattern detection (hash-based, not LLM)
+- Docker Compose for local development, managed platform for production
 
 **Verification**:
-- API accessible at public URL
-- `POST /api/analyze` accepts log payload and returns `AnalysisResult`
-- Health check passes
+- API accessible at public URL with API key auth
+- `POST /api/analyze` stores results and returns analysis
+- `GET /api/failures` returns paginated results with filtering
+- Pattern detection identifies recurring failures
+- Alembic migrations run cleanly
 - CI/CD pipeline deploys automatically on push
-- API handles concurrent requests without issues
+- Health check verifies DB connectivity
 
-**Human Checkpoint**: Review API code, deployment config, CI/CD pipeline. **Live service.**
+**Human Checkpoint**: Review API design, database schema, auth implementation, deployment config. **Real backend service.**
 
 ---
 
@@ -150,19 +170,18 @@ Phases 1-2 prove you can design and build AI-powered developer tools. Phase 3 pr
 
 ## Deferred — Future Enhancements
 
-These features add value but don't help demonstrate AI engineering skills. Build them after Phases 1-4 are complete, if desired.
+These features add value but are separate career signals. Build them after Phases 1-4 are complete, if desired.
 
 | Feature | What It Does | Notes |
 |---|---|---|
-| **Deep Infrastructure (EKS/Terraform)** | Production-grade K8s deployment with Terraform modules | Only if targeting infra/platform roles specifically |
+| **Deep Infrastructure (EKS/Terraform)** | Production-grade K8s deployment with Terraform modules | Infra/platform career signal |
 | **Kustomize + Prometheus/Grafana** | Multi-environment K8s + observability stack | Same — infra career signal |
-| **Central API + Persistence** | FastAPI server receiving results from Tier 1, PostgreSQL storage, failure pattern detection | Product feature, not AI engineering signal |
-| **React Dashboard** | Web UI showing failure history, trends, recurring patterns | Frontend, not AI signal |
+| **React Dashboard** | Web UI showing failure history, trends, recurring patterns | Frontend signal |
 | **CLI Tool** | `cifi history`, `cifi patterns`, `cifi status` via typer | Nice-to-have |
 | **MCP Server** | Expose CIFI tools to AI agent workflows | AI-adjacent, good for later |
 | **Slack Integration** | Failure summaries posted to Slack channels | Product feature |
 
-The lightweight API in Phase 3 is designed so that these features can be added incrementally later without rearchitecting.
+Phase 3's backend is designed to be extensible — dashboard, CLI, and integrations can be added incrementally.
 
 ---
 
@@ -170,9 +189,10 @@ The lightweight API in Phase 3 is designed so that these features can be added i
 
 | Principle | How |
 |---|---|
-| **AI engineering is the star** | The hybrid analysis architecture, LLM integration, and prompt design are the core showcase |
+| **AI + backend engineering** | Phase 1-2 = AI showcase. Phase 3 = backend showcase. Both are core. |
 | **Ship the product first** | Phases 1-2 prove you can build and ship AI-powered software |
-| **Deploy simply** | Phase 3 uses Docker + managed platform. No infrastructure rabbit holes. |
+| **Build a real backend** | Phase 3 has a real database, auth, persistence, and pattern detection — not a toy API |
+| **Deploy simply** | Docker + managed platform. No infrastructure rabbit holes. |
 | **Get real users** | Phase 4 proves the product solves a real problem |
 | **Incremental delivery** | Each phase produces a working artifact. Never advance with broken tests. |
 | **Human-in-the-loop** | Pause after each phase for review/approval before advancing. |
@@ -185,14 +205,15 @@ The lightweight API in Phase 3 is designed so that these features can be added i
 
 | Decision | Rationale |
 |---|---|
-| **AI engineering > infrastructure** | Multi-provider LLM integration, hybrid analysis, structured prompting = AI Engineer profile. Deep Terraform/EKS doesn't help with AI roles. |
+| **AI engineering + backend in one project** | Phase 1-2 = AI skills (hybrid analysis, LLM integration, prompting). Phase 3 = backend skills (API design, PostgreSQL, auth, persistence). Both in one coherent product. |
 | **Hybrid analysis (rules + LLM)** | Demonstrates AI engineering judgment: know when to use deterministic code vs. when to use LLM. Cost-optimized. |
 | **Multi-provider LLM architecture** | Provider-agnostic design via Python protocols. Shows real LLM integration experience, not just "call OpenAI API". |
 | **Structured prompting + Pydantic** | Force JSON output, validate against schema. Production-grade LLM integration, not notebook demos. |
-| **Simple deployment (Docker + managed platform)** | Deploy is a means, not the goal. Fly.io/Railway gives you a live URL without infrastructure complexity. |
+| **Real backend, not a toy** | PostgreSQL + SQLAlchemy + Alembic + API key auth + pagination + pattern detection. This is backend engineering. |
+| **Simple deployment (Docker + managed platform)** | Fly.io/Railway gives you a live URL + managed Postgres without infrastructure complexity. |
 | **GitHub Marketplace** | Real distribution channel. Real users. Proves the product ships. |
 | **GitHub Action as Tier 1** | Zero infra, marketplace distribution, 3-line adoption. The right distribution model. |
-| **Deferred deep infra** | EKS/Terraform/Kustomize are valuable but are a separate career signal. Don't dilute the AI engineering story. |
+| **Deferred deep infra** | EKS/Terraform/Kustomize are valuable but are a separate career signal. Don't dilute the core story. |
 
 ---
 
@@ -207,7 +228,13 @@ cifi/               # Core engine: rules, preprocessor, analyzer, schemas
   analyzer.py       # Hybrid analyzer: rules first, LLM fallback
   schemas.py        # Pydantic models for structured output
 action/             # GitHub Action: entrypoint, Dockerfile, action.yml
-backend/            # Lightweight API for deployment (Phase 3)
+backend/            # Backend API service (Phase 3)
+  routers/          # FastAPI route handlers
+  services/         # Business logic layer
+  models/           # SQLAlchemy ORM models
+  database.py       # DB connection + session management
+  auth.py           # API key authentication
+  alembic/          # Database migrations
 docs/               # Design docs: HLD, DD, Plan, North Star
 .github/            # Copilot instructions, CI/CD pipelines
 ```

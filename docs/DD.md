@@ -339,39 +339,165 @@ to use a valid email format matching the new regex.
 
 ---
 
-## Tier 2 — Lightweight API
+## Tier 2 — Backend API
 
 ### 7. API Service (Phase 3)
 
 #### Tech
 - FastAPI application in `backend/`
-- Docker container, deployable to any platform
-- Minimal endpoints — same hybrid analyzer, different interface
+- PostgreSQL + SQLAlchemy async ORM (`asyncpg`)
+- Alembic for database migrations
+- API key authentication middleware
+- Docker + Docker Compose
+
+#### Responsibilities
+- Expose the hybrid analyzer as a REST API (on-demand analysis)
+- Receive and store analysis results from Tier 1 Actions
+- Persist failure history in PostgreSQL
+- Detect recurring failure patterns via hash-based matching
+- Serve paginated, filterable failure history
 
 #### Endpoints
 ```python
-@router.get("/api/health")
-async def health() -> dict:
-    """Health check for deployment platform."""
-    return {"status": "ok"}
-
+# Analysis
 @router.post("/api/analyze")
-async def analyze_logs(payload: AnalyzeRequest) -> AnalysisResult:
-    """Accept a log payload, run hybrid analyzer, return result."""
+async def analyze_logs(payload: AnalyzeRequest, db: AsyncSession) -> AnalysisResult:
+    """Run hybrid analyzer, store result, return analysis."""
     context = preprocess(payload.logs, payload.source_files)
-    return await analyze(context)
+    result = await analyze(context)
+    await store_failure(db, result, payload.metadata)
+    await check_patterns(db, result)
+    return result
+
+# Failure History
+@router.get("/api/failures")
+async def list_failures(
+    db: AsyncSession,
+    repo: str | None = None,
+    branch: str | None = None,
+    failure_type: str | None = None,
+    since: datetime | None = None,
+    page: int = 1,
+    per_page: int = 20,
+) -> PaginatedResponse[FailureSummary]:
+    """List stored failures with pagination and filtering."""
+    ...
+
+@router.get("/api/failures/{failure_id}")
+async def get_failure(failure_id: uuid.UUID, db: AsyncSession) -> FailureDetail:
+    """Get full failure detail including analysis result."""
+    ...
+
+# Pattern Detection
+@router.get("/api/patterns")
+async def list_patterns(
+    db: AsyncSession,
+    repo: str | None = None,
+    min_occurrences: int = 3,
+) -> list[PatternSummary]:
+    """List recurring failure patterns."""
+    ...
+
+# Health
+@router.get("/api/health")
+async def health(db: AsyncSession) -> dict:
+    """Health check with DB connectivity status."""
+    ...
+```
+
+#### Authentication Middleware
+```python
+async def verify_api_key(request: Request) -> None:
+    """API key auth middleware. Key passed via X-API-Key header."""
+    api_key = request.headers.get("X-API-Key")
+    if not api_key or not verify(api_key):
+        raise HTTPException(status_code=401, detail="Invalid API key")
+```
+
+---
+
+### 8. Database Models + Pattern Detection
+
+#### Tech
+- SQLAlchemy 2.0 async ORM
+- Alembic for schema migrations
+- PostgreSQL
+
+#### Database Schema
+```python
+class Failure(Base):
+    __tablename__ = "failures"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    repo: Mapped[str] = mapped_column(String(255), index=True)
+    branch: Mapped[str] = mapped_column(String(255))
+    commit_sha: Mapped[str] = mapped_column(String(40))
+    run_id: Mapped[int | None]
+    pr_number: Mapped[int | None]
+    failure_type: Mapped[str] = mapped_column(String(50), index=True)
+    confidence: Mapped[str] = mapped_column(String(10))
+    root_cause: Mapped[str] = mapped_column(Text)
+    suggested_fix: Mapped[str] = mapped_column(Text)
+    contributing_factors: Mapped[list[str]] = mapped_column(JSONB)
+    relevant_log_lines: Mapped[list[str]] = mapped_column(JSONB)
+    analysis_method: Mapped[str] = mapped_column(String(20))  # rule_engine | llm
+    pattern_hash: Mapped[str] = mapped_column(String(64), index=True)  # SHA-256
+    created_at: Mapped[datetime] = mapped_column(default=func.now(), index=True)
+
+class Pattern(Base):
+    __tablename__ = "patterns"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    pattern_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    failure_type: Mapped[str] = mapped_column(String(50))
+    root_cause_summary: Mapped[str] = mapped_column(Text)
+    occurrence_count: Mapped[int] = mapped_column(default=1)
+    repos: Mapped[list[str]] = mapped_column(JSONB)  # repos where this pattern appears
+    first_seen: Mapped[datetime] = mapped_column(default=func.now())
+    last_seen: Mapped[datetime] = mapped_column(default=func.now())
+```
+
+#### Pattern Detection Logic
+```python
+def compute_pattern_hash(root_cause: str, failure_type: str) -> str:
+    """Deterministic hash for failure pattern matching."""
+    normalized = normalize_error(root_cause)  # strip line numbers, paths, etc.
+    return hashlib.sha256(f"{normalized}:{failure_type}".encode()).hexdigest()
+
+async def check_patterns(db: AsyncSession, result: AnalysisResult, repo: str) -> None:
+    """Update or create pattern record. Flag when occurrence_count >= 3."""
+    pattern_hash = compute_pattern_hash(result.root_cause, result.failure_type)
+    existing = await db.execute(
+        select(Pattern).where(Pattern.pattern_hash == pattern_hash)
+    )
+    pattern = existing.scalar_one_or_none()
+    if pattern:
+        pattern.occurrence_count += 1
+        pattern.last_seen = func.now()
+        if repo not in pattern.repos:
+            pattern.repos = [*pattern.repos, repo]
+    else:
+        db.add(Pattern(
+            pattern_hash=pattern_hash,
+            failure_type=result.failure_type,
+            root_cause_summary=result.root_cause,
+            repos=[repo],
+        ))
+    await db.commit()
 ```
 
 #### Deployment
 ```
-Docker container → Fly.io / Railway / Cloud Run
-├── Dockerfile (multi-stage build)
-├── docker-compose.yml (local dev)
-├── .github/workflows/deploy.yml (CI/CD: test → build → deploy)
-└── Environment variables for LLM provider config
-```
+Docker Compose (local dev):
+├── cifi-api       (FastAPI app, port 8000)
+└── postgres       (PostgreSQL 16, port 5432)
 
-No Terraform modules. No Kubernetes manifests. No Kustomize overlays. The AI engine is the product — deploy it simply.
+Production (Fly.io / Railway / Cloud Run):
+├── Docker container (API)
+├── Managed PostgreSQL
+├── Alembic migrations run in CI/CD before deploy
+└── GitHub Actions: lint → test → build → migrate → deploy
+```
 
 ---
 
@@ -388,13 +514,6 @@ If targeting platform/infra roles specifically:
 - Kustomize overlays: base + dev/prod
 - Prometheus + Grafana observability
 - HPA, Sealed Secrets, IAM policies
-
-### Full API Server (replaces minimal API)
-- `POST /api/failures` — receive and store results from Tier 1 (JWT auth)
-- `GET /api/failures` — list failures (filterable by repo, branch, date range)
-- `GET /api/failures/{id}` — single failure detail
-- `GET /api/patterns/{repo}` — recurring failure patterns
-- SQLAlchemy ORM + Alembic migrations, `failures` and `failure_patterns` tables
 
 ### Web Dashboard
 - React frontend: recent failures, recurring patterns, per-repo failure rate chart, failure detail view
@@ -426,5 +545,7 @@ If targeting platform/infra roles specifically:
 |---|---|---|
 | `CIFI_LLM_PROVIDER` | LLM provider for on-demand analysis | `github-models` |
 | `CIFI_LLM_API_KEY` | API key for LLM provider | (optional) |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://...` |
+| `CIFI_API_KEY` | API key for authenticating clients | (required) |
 
 All secrets via env vars or GitHub Actions secrets. Never hardcoded.
