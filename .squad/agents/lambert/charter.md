@@ -40,4 +40,4 @@ Testing, quality assurance, and edge case coverage for CIFI.
 
 ## Model
 
-Preferred: auto
+Preferred: claude-opus-4.6

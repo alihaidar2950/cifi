@@ -34,4 +34,4 @@ Architecture, code review, and technical decisions for CIFI.
 
 ## Model
 
-Preferred: auto
+Preferred: claude-opus-4.6

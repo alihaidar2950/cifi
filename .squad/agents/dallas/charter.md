@@ -40,4 +40,4 @@ Core Python engine development for CIFI — rule engine, log preprocessor, hybri
 
 ## Model
 
-Preferred: auto
+Preferred: claude-opus-4.6

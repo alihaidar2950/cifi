@@ -25,3 +25,7 @@ Silent documentation specialist. Maintains history, decisions, orchestration log
 - Never modifies source code
 - Only writes to `.squad/` files
 - Always runs as background mode
+
+## Model
+
+Preferred: claude-opus-4.6

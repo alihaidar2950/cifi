@@ -41,4 +41,4 @@ GitHub Action packaging, Docker, CI/CD, and infrastructure for CIFI.
 
 ## Model
 
-Preferred: auto
+Preferred: claude-opus-4.6
