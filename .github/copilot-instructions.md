@@ -1,35 +1,39 @@
 # CIFI — Copilot Instructions
 
-This is **CI Failure Intelligence (CIFI)** — an AI-powered CI failure analysis agent with a two-tier architecture:
+This is **CI Failure Intelligence (CIFI)** — an AI-powered CI failure analysis agent with a hybrid AI analysis core:
 
-- **Tier 1 — GitHub Action**: Embedded in target repos. Reads logs + source code from the checkout, runs hybrid analysis (rule engine first, LLM fallback), posts PR comments. Zero infrastructure.
-- **Tier 2 — Central Server** (optional): FastAPI + PostgreSQL on EKS. Aggregates data across repos, dashboard, MCP server, CLI.
+- **Tier 1 — GitHub Action**: Embedded in target repos. Reads logs + source code from the checkout, runs hybrid AI analysis (rule engine first, multi-provider LLM fallback), posts PR comments. Zero infrastructure.
+- **Tier 2 — Lightweight API** (Phase 3): Simple FastAPI service deployed via Docker on a managed platform (Fly.io / Railway / Cloud Run).
 
 ## Key Docs
-- `docs/PLAN.md` — Full phased implementation plan (6 phases)
-- `docs/HLD.md` — Two-tier architecture design
+- `docs/PLAN.md` — 4-phase implementation plan (AI engine → ship → deploy → adopt)
+- `docs/HLD.md` — Architecture design
 - `docs/DD.md` — Detailed design (component-level)
 - `docs/NORTH_STAR.md` — Vision and success criteria
 - `.github/instrctions/pr-instructions.md` — Agent workflow for commit, push, and pull request actions
 
 ## Current Phase
-Phase 1 — Core Engine (rule engine + preprocessor + analyzer)
+Phase 1 — Core Engine (hybrid AI analysis: rule engine + multi-provider LLM + structured prompting)
+
+## Build Priority
+- Phase 1-2: Core AI Engine + GitHub Action (the AI engineering showcase — ship the product)
+- Phase 3: Deploy + API — lightweight FastAPI service via Docker on a managed platform
+- Phase 4: Adoption + Growth — real users, blog post, marketplace traction
+- Deferred: Deep infrastructure (EKS/Terraform/Kustomize), React dashboard, MCP server, CLI, Slack
 
 ## Project Structure
-- `cifi/` — Core engine: rule engine, preprocessor, analyzer, schemas (shared by both tiers)
+- `cifi/` — Core AI engine: rule engine, preprocessor, hybrid analyzer, schemas, multi-provider LLM integration
+- `cifi/llm/` — Multi-provider LLM: base protocol, claude, openai, github-models, ollama
 - `action/` — GitHub Action: entrypoint, Dockerfile, action.yml (Tier 1)
-- `backend/` — Tier 2 FastAPI server (Phase 3+)
-- `frontend/` — Tier 2 React dashboard (Phase 4+)
-- `cli/` — Developer CLI: `cifi history`, `cifi patterns`, etc. (Phase 4+)
-- `k8s/` — Kubernetes manifests (Phase 5)
-- `terraform/` — IaC for AWS EKS + supporting infra (Phase 5)
+- `backend/` — Lightweight API for Docker deployment (Phase 3)
 
 ## Conventions
 - All commands go through the root `Makefile`
-- Two-tier: Tier 1 (GitHub Action) works alone, Tier 2 (Central Server) is optional
-- Hybrid analysis: rule engine first (free, instant), LLM fallback for complex failures
-- K8s manifests use Kustomize, deployed to `cifi` namespace
-- No secrets hardcoded — use env vars, GitHub Actions secrets, and K8s Secrets
-- Test every phase before advancing to the next
+- Two-tier: Tier 1 (GitHub Action) works alone, API deployment is Phase 3
+- Hybrid AI analysis: rule engine first (free, instant), multi-provider LLM fallback for complex failures
+- Provider-agnostic LLM integration via Python protocol classes
 - Force JSON output from LLM — always validate against Pydantic schema
+- No secrets hardcoded — use env vars and GitHub Actions secrets
+- Test every phase before advancing to the next
+- Simple deployment: Docker + managed platform. No infrastructure rabbit holes.
 - When user requests push or PR actions, follow `.github/instrctions/pr-instructions.md`

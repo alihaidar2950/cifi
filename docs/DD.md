@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the implementation-level design of each CIFI system component across both tiers. It complements the HLD by going deeper into interfaces, data flows, and technology choices.
+This document describes the implementation-level design of each CIFI system component. It complements the HLD by going deeper into interfaces, data flows, and technology choices. The core AI engineering lives in the hybrid analyzer and multi-provider LLM integration.
 
 ---
 
@@ -19,7 +19,7 @@ This document describes the implementation-level design of each CIFI system comp
 - Read CI failure context from the GitHub Actions environment
 - Orchestrate the analysis pipeline: ingestion → preprocessing → hybrid analysis
 - Post results as a PR comment
-- Optionally POST results to Tier 2 central server
+- Optionally POST results to Tier 2 API
 
 #### Interface — `action.yml`
 ```yaml
@@ -36,12 +36,6 @@ inputs:
     default: 'github-models'
   llm-api-key:
     description: 'API key for LLM provider (not needed for github-models)'
-    required: false
-  central-server-url:
-    description: 'Tier 2 central server URL for aggregation (optional)'
-    required: false
-  central-server-token:
-    description: 'JWT token for Tier 2 API auth (optional)'
     required: false
 runs:
   using: 'docker'
@@ -69,9 +63,9 @@ async def main():
     # 5. Post PR comment
     post_pr_comment(context.pr_number, format_comment(result))
 
-    # 6. Optional: send to Tier 2
-    if central_server_url:
-        post_to_tier2(central_server_url, result)
+    # 6. Optional: send to API
+    if api_url:
+        post_to_api(api_url, result)
 ```
 
 ---
@@ -80,14 +74,13 @@ async def main():
 
 #### Tech
 - Python module: `cifi/ingestion.py`
-- Local filesystem access (Tier 1) + GitHub REST API (Tier 2 fallback)
+- Local filesystem access (Tier 1)
 
 #### Responsibilities
 - Read CI logs from step output files and `$GITHUB_STEP_SUMMARY`
 - Read source code directly from `$GITHUB_WORKSPACE` (full checkout)
 - Read git diff via local `git diff HEAD~1`
 - Read dependency manifests, config files, test fixtures from workspace
-- For Tier 2 (remote analysis): fall back to GitHub REST API
 
 #### Interface
 ```python
@@ -107,10 +100,6 @@ class FailureContext:
 
 def ingest_local(workspace: str, step_outputs: list[str]) -> FailureContext:
     """Tier 1: Read everything from local filesystem."""
-    ...
-
-async def ingest_remote(run_id: int, repo: str) -> FailureContext:
-    """Tier 2: Fetch via GitHub REST API (less context available)."""
     ...
 ```
 
@@ -155,7 +144,7 @@ def preprocess(context: FailureContext, max_tokens: int = 8000) -> ProcessedCont
 ```
 
 #### Design Decision
-The quality of analysis output is directly proportional to the quality of input. The preprocessor is where most engineering work lives — not the LLM call itself.
+The quality of analysis output is directly proportional to the quality of input. The preprocessor is where most engineering work lives — not the LLM call itself. This is a key AI engineering insight: the preprocessing pipeline matters more than the model choice.
 
 ---
 
@@ -237,14 +226,14 @@ Rule(
 
 #### Tech
 - Python module: `cifi/analyzer.py`
-- Rule engine (built-in) + LLM providers (GitHub Models, Claude, OpenAI, Ollama)
+- Rule engine (built-in) + multi-provider LLM integration
 - Pydantic for output validation
 
 #### Responsibilities
 - Run rule engine first — if high-confidence match, return immediately (free, instant)
 - Fall back to LLM for complex or unmatched failures
 - Parse and validate LLM JSON response against output schema
-- Retry with exponential backoff on transient LLM failures
+- Retry with exponential backoff on transient LLM failures or validation errors
 
 #### Interface
 ```python
@@ -275,32 +264,49 @@ async def analyze(context: ProcessedContext) -> AnalysisResult:
     return await llm_analyze(context)
 ```
 
-#### LLM Providers
+#### Multi-Provider LLM Architecture
 ```python
 class LLMProvider(Protocol):
+    """Provider-agnostic interface for LLM integration."""
     async def analyze(self, prompt: str) -> str: ...
 
 class GitHubModelsProvider(LLMProvider):
-    """Free LLM via GitHub Models API. Uses GITHUB_TOKEN."""
+    """Free LLM via GitHub Models API. Uses GITHUB_TOKEN. Zero config."""
     base_url = "https://models.inference.ai.azure.com"
 
 class ClaudeProvider(LLMProvider):
-    """Anthropic Claude API. Requires CIFI_LLM_API_KEY."""
+    """Anthropic Claude API. Higher quality analysis."""
 
 class OpenAIProvider(LLMProvider):
     """OpenAI-compatible API. Supports any OpenAI-compatible endpoint."""
 
 class OllamaProvider(LLMProvider):
-    """Local Ollama instance. No data leaves the machine."""
+    """Local Ollama instance. No data leaves the machine. Privacy-first."""
 ```
 
-#### LLM Prompt Structure
-```
-System: You are a CI failure analyst. Given pipeline logs, source code context,
-a git diff, and test output, identify the root cause of the failure and suggest
-a fix. Always respond in valid JSON matching the schema provided.
+This protocol-based design is a key AI engineering pattern: it decouples the analysis logic from the LLM vendor, making the system extensible and testable.
 
-User: {preprocessed context with logs, source code, diff, metadata}
+#### Prompt Engineering
+```python
+# System prompt — defines role, output format, domain expertise
+SYSTEM_PROMPT = """You are a CI failure analyst. Given pipeline logs, source code context,
+a git diff, and test output, identify the root cause of the failure and suggest a fix.
+
+Always respond in valid JSON matching this schema:
+{schema}
+
+Rules:
+- Be specific about the root cause — reference exact files and line numbers
+- The suggested fix should be actionable, not generic advice
+- Include the most relevant log lines that support your analysis
+- Set confidence to "low" if you're uncertain
+"""
+
+# Context window management — intelligent truncation
+def build_prompt(context: ProcessedContext, max_tokens: int = 8000) -> str:
+    """Build LLM prompt with intelligent context prioritization."""
+    # Priority: error region > stack trace > source code > diff
+    ...
 ```
 
 ---
@@ -327,148 +333,82 @@ to use a valid email format matching the new regex.
 > AssertionError: assert 'invalid' == 'valid'
 > tests/test_users.py::test_user_creation FAILED
 
-⚠️ *This failure has occurred 5 times in the last 7 days.*
-
 ---
 <sub>Analyzed by [CIFI](https://github.com/alihaidar2950/cifi) · Rule engine match · 0.02s</sub>
 ```
 
 ---
 
-## Tier 2 Components (Central Server)
+## Tier 2 — Lightweight API
 
-### 7. FastAPI API Server
+### 7. API Service (Phase 3)
 
 #### Tech
 - FastAPI application in `backend/`
-- JWT authentication for Tier 1 → Tier 2 communication
-- SQLAlchemy ORM + Alembic migrations
+- Docker container, deployable to any platform
+- Minimal endpoints — same hybrid analyzer, different interface
 
 #### Endpoints
 ```python
-# Receive results from Tier 1
-@router.post("/api/failures", status_code=201)
-async def create_failure(failure: FailureCreate, token: JWTToken) -> FailureResponse:
-    ...
-
-# Query failures
-@router.get("/api/failures")
-async def list_failures(repo: str | None, branch: str | None, limit: int = 50) -> list[FailureSummary]:
-    ...
-
-@router.get("/api/failures/{failure_id}")
-async def get_failure(failure_id: UUID) -> FailureDetail:
-    ...
-
-# Patterns
-@router.get("/api/patterns/{repo}")
-async def get_patterns(repo: str) -> list[PatternSummary]:
-    ...
-
-# Health
 @router.get("/api/health")
 async def health() -> dict:
+    """Health check for deployment platform."""
     return {"status": "ok"}
+
+@router.post("/api/analyze")
+async def analyze_logs(payload: AnalyzeRequest) -> AnalysisResult:
+    """Accept a log payload, run hybrid analyzer, return result."""
+    context = preprocess(payload.logs, payload.source_files)
+    return await analyze(context)
 ```
 
----
-
-### 8. Persistence Layer
-
-#### Tech
-- PostgreSQL, SQLAlchemy ORM, Alembic migrations
-
-#### Tables
-
-##### `failures`
-| Column | Type | Description |
-|---|---|---|
-| id | UUID | Primary key |
-| repo | VARCHAR | Repository full name (owner/repo) |
-| run_id | BIGINT | GitHub Actions run ID |
-| branch | VARCHAR | Branch that triggered the run |
-| commit_sha | VARCHAR(40) | Commit SHA |
-| triggered_at | TIMESTAMP | When the failure occurred |
-| failure_type | VARCHAR | test_failure, build_error, etc. |
-| confidence | VARCHAR | high, medium, low |
-| root_cause | TEXT | One sentence summary |
-| suggested_fix | TEXT | Actionable fix suggestion |
-| analysis_method | VARCHAR | rule_engine or llm |
-| raw_analysis_json | JSONB | Full analysis result |
-| created_at | TIMESTAMP | When the record was created |
-
-##### `failure_patterns`
-| Column | Type | Description |
-|---|---|---|
-| id | UUID | Primary key |
-| repo | VARCHAR | Repository full name |
-| pattern_hash | VARCHAR(64) | SHA-256 of normalized error + failure type |
-| failure_type | VARCHAR | Category of failure |
-| first_seen | TIMESTAMP | First occurrence |
-| last_seen | TIMESTAMP | Most recent occurrence |
-| occurrence_count | INTEGER | Number of times seen |
-| example_run_ids | BIGINT[] | Array of example run IDs |
-
-#### Pattern Detection
-`pattern_hash` = SHA-256(normalize(error_message) + failure_type). Detects recurring failures deterministically without LLM calls. Flagged as recurring when `occurrence_count >= 3`.
-
----
-
-### 9. Web Dashboard
-
-#### Tech
-- React frontend
-- Talks to Tier 2 FastAPI API
-
-#### Views
-| View | Description |
-|---|---|
-| Recent Failures | List of failures with root cause summaries, filterable by repo |
-| Recurring Patterns | Failures seen 3+ times, grouped by pattern hash |
-| Failure Rate | Per-repo failure rate over time (simple chart) |
-| Failure Detail | Full analysis view with logs, source context, and suggested fix |
-
----
-
-### 10. MCP Server
-
-#### Tech
-- Python MCP SDK
-- Integrated into the Tier 2 FastAPI app
-
-#### Exposed Tools
-```python
-@mcp.tool()
-async def analyze_failure(run_id: int) -> AnalysisResult:
-    """Run analysis on a specific CI run."""
-
-@mcp.tool()
-async def get_failure_history(repo: str, days: int = 7) -> list[FailureSummary]:
-    """Return recent failure trends for a repo."""
-
-@mcp.tool()
-async def get_recurring_patterns(repo: str) -> list[PatternSummary]:
-    """Return failures that repeat across runs."""
-
-@mcp.tool()
-async def get_fix_suggestions(run_id: int) -> FixSuggestion:
-    """Return suggested fixes for a given failure."""
+#### Deployment
+```
+Docker container → Fly.io / Railway / Cloud Run
+├── Dockerfile (multi-stage build)
+├── docker-compose.yml (local dev)
+├── .github/workflows/deploy.yml (CI/CD: test → build → deploy)
+└── Environment variables for LLM provider config
 ```
 
+No Terraform modules. No Kubernetes manifests. No Kustomize overlays. The AI engine is the product — deploy it simply.
+
 ---
 
-### 11. CLI Tool
+## Deferred Component Designs (Future)
 
-#### Tech
-- Python + `typer`
-- Talks to Tier 2 API
+The following are documented for future reference. They are not part of the current build plan.
 
-#### Commands
-```bash
-cifi history <repo>           # Show recent failure history
-cifi patterns <repo>          # Show recurring failure patterns
-cifi status                   # Check central server health
-```
+<details>
+<summary>Click to expand deferred component designs</summary>
+
+### Deep Infrastructure (EKS + Terraform)
+If targeting platform/infra roles specifically:
+- Terraform modules: VPC/subnets, EKS cluster, ECR, RDS
+- Kustomize overlays: base + dev/prod
+- Prometheus + Grafana observability
+- HPA, Sealed Secrets, IAM policies
+
+### Full API Server (replaces minimal API)
+- `POST /api/failures` — receive and store results from Tier 1 (JWT auth)
+- `GET /api/failures` — list failures (filterable by repo, branch, date range)
+- `GET /api/failures/{id}` — single failure detail
+- `GET /api/patterns/{repo}` — recurring failure patterns
+- SQLAlchemy ORM + Alembic migrations, `failures` and `failure_patterns` tables
+
+### Web Dashboard
+- React frontend: recent failures, recurring patterns, per-repo failure rate chart, failure detail view
+
+### MCP Server
+- `analyze_failure(run_id)`, `get_failure_history(repo, days)`, `get_recurring_patterns(repo)`, `get_fix_suggestions(run_id)`
+
+### CLI Tool
+- `cifi history <repo>`, `cifi patterns <repo>`, `cifi status` — Python + typer
+
+### Slack Integration
+- Failure summaries posted to Slack channels via incoming webhook
+
+</details>
 
 ---
 
@@ -480,16 +420,11 @@ cifi status                   # Check central server health
 | `github-token` | GitHub API access + PR comments | `${{ github.token }}` |
 | `llm-provider` | LLM backend: `github-models`, `claude`, `openai`, `ollama` | `github-models` |
 | `llm-api-key` | API key for paid LLM providers | (optional) |
-| `central-server-url` | Tier 2 server URL for aggregation | (optional) |
-| `central-server-token` | JWT token for Tier 2 auth | (optional) |
 
-### Tier 2 (Environment Variables)
+### Tier 2 API (Environment Variables)
 | Variable | Purpose | Default |
 |---|---|---|
-| `DATABASE_URL` | PostgreSQL connection string | (required) |
-| `SECRET_KEY` | JWT signing key | (required) |
-| `CIFI_LLM_PROVIDER` | Default LLM provider for on-demand analysis | `github-models` |
+| `CIFI_LLM_PROVIDER` | LLM provider for on-demand analysis | `github-models` |
 | `CIFI_LLM_API_KEY` | API key for LLM provider | (optional) |
-| `SLACK_WEBHOOK_URL` | Slack incoming webhook URL | (optional) |
 
-All secrets via env vars, GitHub Actions secrets, or K8s Secrets. Never hardcoded.
+All secrets via env vars or GitHub Actions secrets. Never hardcoded.
