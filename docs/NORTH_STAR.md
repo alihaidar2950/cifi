@@ -26,6 +26,21 @@ This happens dozens of times per day across any engineering team. It is solved n
 
 CIFI runs **inside** your CI pipeline as a GitHub Action. When a step fails, it:
 
+```mermaid
+flowchart LR
+    fail["CI Step Fails"] --> read["Read logs +\nsource code"]
+    read --> rules{"Rule Engine\n50+ patterns"}
+    rules -->|"match (~70%)"| result["Root cause +\nsuggested fix"]
+    rules -->|"no match (~30%)"| llm["LLM Analysis\n(multi-provider)"]
+    llm --> validate["Pydantic\nvalidation"]
+    validate --> result
+    result --> comment["PR Comment"]
+
+    style rules fill:#2d6a4f,stroke:#1b4332,color:#fff
+    style llm fill:#e76f51,stroke:#264653,color:#fff
+    style comment fill:#0f3460,stroke:#e94560,color:#fff
+```
+
 - Reads the CI logs and source code directly from the checkout (full repo context)
 - Runs a rule engine against 50+ known failure patterns (instant, free)
 - Falls back to multi-provider LLM analysis for complex failures (GitHub Models / Claude / OpenAI / Ollama)
@@ -42,6 +57,33 @@ By running inside the CI pipeline (not as an external webhook receiver), CIFI ha
 ## Why This Project — Career Context
 
 This project exists to solve a real problem **and** to demonstrate AI engineering depth.
+
+```mermaid
+flowchart TB
+    subgraph cifi["CIFI Project"]
+        p12["Phase 1-2\nCore Engine + Action"]
+        p3["Phase 3\nBackend API"]
+        p4["Phase 4\nAdoption"]
+    end
+
+    p12 --> ai["AI Engineering Signal"]
+    p12 --> devprod["DevProd Signal"]
+    p3 --> backend["Backend Engineering Signal"]
+    p4 --> product["Product Ownership Signal"]
+
+    ai --> roles1["AI Engineer\nML Platform Engineer"]
+    backend --> roles2["Senior Backend Engineer\nPlatform Engineer"]
+    devprod --> roles3["DevProd Engineer\nDeveloper Experience"]
+    product --> roles4["Tech Lead\nStaff Engineer"]
+
+    style p12 fill:#e76f51,stroke:#264653,color:#fff
+    style p3 fill:#0f3460,stroke:#e94560,color:#fff
+    style p4 fill:#6a4c93,stroke:#264653,color:#fff
+    style ai fill:#2a9d8f,stroke:#264653,color:#fff
+    style backend fill:#2a9d8f,stroke:#264653,color:#fff
+    style devprod fill:#2a9d8f,stroke:#264653,color:#fff
+    style product fill:#2a9d8f,stroke:#264653,color:#fff
+```
 
 | Career Goal | How CIFI Serves It |
 |---|---|
@@ -157,6 +199,25 @@ Scope discipline is a feature. A sharp tool beats a sprawling one every time.
 ---
 
 ## Timeline
+
+```mermaid
+gantt
+    title CIFI Development Phases
+    dateFormat YYYY-MM-DD
+    axisFormat %b %Y
+
+    section Phase 1
+    Core Engine (rules + preprocessor + hybrid analyzer)    :p1, 2026-03-29, 21d
+
+    section Phase 2
+    GitHub Action (Tier 1 — PR comments, Marketplace)       :p2, after p1, 14d
+
+    section Phase 3
+    Backend API + PostgreSQL + Auth + Patterns               :p3, after p2, 21d
+
+    section Phase 4
+    Adoption (real users, blog, demo, marketplace)           :p4, after p3, 14d
+```
 
 | Phase | Deliverable | Career Signal |
 |---|---|---|

@@ -13,77 +13,46 @@ The core AI engineering is in the **hybrid analysis engine**: a two-stage archit
 
 ## Architecture Diagram
 
-```
-                    ┌─────────────────────────────────────────────┐
-                    │           TARGET REPO (GitHub)               │
-                    │                                             │
-                    │  Developer pushes commit                    │
-                    │       │                                     │
-                    │       ▼                                     │
-                    │  GitHub Actions workflow runs                │
-                    │       │                                     │
-                    │       ▼ (on failure)                        │
-                    │  ┌──────────────────────────────────────┐   │
-                    │  │  TIER 1 — CIFI GitHub Action         │   │
-                    │  │                                      │   │
-                    │  │  ┌─────────────┐  ┌──────────────┐   │   │
-                    │  │  │ Log Ingestion│  │ Source Code  │   │   │
-                    │  │  │ (local files)│  │ Context      │   │   │
-                    │  │  └──────┬──────┘  └──────┬───────┘   │   │
-                    │  │         └───────┬─────────┘           │   │
-                    │  │                 ▼                     │   │
-                    │  │         ┌──────────────┐              │   │
-                    │  │         │ Preprocessor │              │   │
-                    │  │         └──────┬───────┘              │   │
-                    │  │                ▼                      │   │
-                    │  │  ┌──────────────────────────────────┐ │   │
-                    │  │  │      Hybrid AI Analyzer          │ │   │
-                    │  │  │                                  │ │   │
-                    │  │  │  ┌────────────────────────────┐  │ │   │
-                    │  │  │  │ Stage 1: Rule Engine       │  │ │   │
-                    │  │  │  │ 50+ patterns, instant,     │  │ │   │
-                    │  │  │  │ handles ~70% of failures   │  │ │   │
-                    │  │  │  └────────────┬───────────────┘  │ │   │
-                    │  │  │              miss?               │ │   │
-                    │  │  │               ▼                  │ │   │
-                    │  │  │  ┌────────────────────────────┐  │ │   │
-                    │  │  │  │ Stage 2: Multi-Provider LLM│  │ │   │
-                    │  │  │  │ ┌────────┬────────┬──────┐ │  │ │   │
-                    │  │  │  │ │Claude  │OpenAI  │GitHub│ │  │ │   │
-                    │  │  │  │ │        │        │Models│ │  │ │   │
-                    │  │  │  │ ├────────┴────────┴──────┤ │  │ │   │
-                    │  │  │  │ │      Ollama (local)    │ │  │ │   │
-                    │  │  │  │ └────────────────────────┘ │  │ │   │
-                    │  │  │  │ Structured prompting       │  │ │   │
-                    │  │  │  │ JSON enforcement           │  │ │   │
-                    │  │  │  │ Pydantic validation        │  │ │   │
-                    │  │  │  └────────────────────────────┘  │ │   │
-                    │  │  └──────────────┬───────────────────┘ │   │
-                    │  │                 │                     │   │
-                    │  │         ┌───────┴────────┐            │   │
-                    │  │         ▼                ▼            │   │
-                    │  │    PR Comment      POST to API        │   │
-                    │  │    (GitHub API)    (if configured)     │   │
-                    │  └──────────────────────────────────────┘   │
-                    └─────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph repo["Target Repo — GitHub"]
+        push["Developer pushes commit"] --> ci["GitHub Actions workflow runs"]
+        ci -->|on failure| action
 
-                                      │
-                                      │ (optional)
-                                      ▼
+        subgraph action["Tier 1 — CIFI GitHub Action"]
+            direction TB
+            ingest["Log Ingestion\n(local files)"] --> preprocess["Preprocessor"]
+            source["Source Code\nContext"] --> preprocess
+            preprocess --> analyzer
 
-                    ┌─────────────────────────────────────────────┐
-                    │       TIER 2 — Backend API                  │
-                    │       (Docker + managed platform)            │
-                    │                                             │
-                    │  ┌──────────────────────────────────────┐   │
-                    │  │  FastAPI + PostgreSQL                    │   │
-                    │  │  POST /api/analyze (hybrid analyzer)      │   │
-                    │  │  GET  /api/failures (history + filtering) │   │
-                    │  │  GET  /api/patterns (recurring failures)  │   │
-                    │  │  GET  /api/health                        │   │
-                    │  │  API key auth • SQLAlchemy ORM • Alembic  │   │
-                    │  └──────────────────────────────────────┘   │
-                    └─────────────────────────────────────────────┘
+            subgraph analyzer["Hybrid AI Analyzer"]
+                direction TB
+                rules["Stage 1: Rule Engine\n50+ patterns · instant · free\n~70% coverage"]
+                rules -->|miss?| llm_stage
+
+                subgraph llm_stage["Stage 2: Multi-Provider LLM"]
+                    providers["Claude | OpenAI | GitHub Models | Ollama"]
+                    validation["Structured Prompting\nJSON Enforcement\nPydantic Validation"]
+                end
+            end
+
+            analyzer --> comment["PR Comment\n(GitHub API)"]
+            analyzer -->|optional| api_post["POST to API"]
+        end
+    end
+
+    api_post -.->|optional| tier2
+
+    subgraph tier2["Tier 2 — Backend API (Docker + managed platform)"]
+        direction TB
+        fastapi["FastAPI + PostgreSQL"]
+        endpoints["POST /api/analyze — hybrid analyzer\nGET /api/failures — history + filtering\nGET /api/patterns — recurring failures\nGET /api/health"]
+        infra["API Key Auth · SQLAlchemy ORM · Alembic"]
+    end
+
+    style action fill:#1a1a2e,stroke:#e94560,color:#fff
+    style analyzer fill:#16213e,stroke:#0f3460,color:#fff
+    style tier2 fill:#0f3460,stroke:#e94560,color:#fff
 ```
 
 ---
@@ -261,21 +230,35 @@ FastAPI service with PostgreSQL:
 The GitHub Action runs in GitHub's hosted runners. No infrastructure to manage. Users add 3 lines to their workflow file.
 
 ### Tier 2 — Local Development
-```
-Docker Compose
-├── cifi-api          (FastAPI app)
-└── postgres          (PostgreSQL database)
+
+```mermaid
+flowchart LR
+    subgraph compose["Docker Compose"]
+        api["cifi-api\nFastAPI app\nPort 8000"]
+        db[("PostgreSQL\nPort 5432")]
+        api <--> db
+    end
 ```
 
 ### Tier 2 — Production
-```
-Docker container deployed to managed platform:
-├── Fly.io / Railway / Cloud Run
-├── Managed PostgreSQL (Fly Postgres / Railway / Cloud SQL)
-├── HTTPS (automatic)
-├── Health checks
-├── Environment variables for config
-└── GitHub Actions CI/CD: test → build → migrate → deploy
+
+```mermaid
+flowchart TB
+    subgraph cicd["GitHub Actions CI/CD"]
+        lint["Lint"] --> test["Test"] --> build["Docker Build"] --> migrate["Alembic Migrate"] --> deploy["Deploy"]
+    end
+
+    subgraph prod["Managed Platform (Fly.io / Railway / Cloud Run)"]
+        container["Docker Container\nFastAPI App"]
+        pg[("Managed PostgreSQL")]
+        container <--> pg
+    end
+
+    deploy --> container
+    prod --- features["HTTPS (auto) · Health Checks · Env Vars"]
+
+    style cicd fill:#264653,stroke:#2a9d8f,color:#fff
+    style prod fill:#0f3460,stroke:#e94560,color:#fff
 ```
 
 No VPCs, no EKS clusters, no Terraform modules. Deploy simply — the AI engine and backend design are the product.
@@ -285,34 +268,59 @@ No VPCs, no EKS clusters, no Terraform modules. Deploy simply — the AI engine 
 ## Data Flow — End to End
 
 ### Tier 1 (Standalone — Primary Use Case)
+
+```mermaid
+sequenceDiagram
+    actor Dev as Developer
+    participant GH as GitHub Actions
+    participant Action as CIFI Action
+    participant Rules as Rule Engine
+    participant LLM as LLM Provider
+    participant PR as PR Comment
+
+    Dev->>GH: Push commit
+    GH->>GH: Workflow runs & fails
+    GH->>Action: Activate (if: failure())
+    Action->>Action: Read CI logs from step outputs
+    Action->>Action: Read source code from $GITHUB_WORKSPACE
+    Action->>Action: Preprocess: extract errors, build context
+    Action->>Rules: Check against 50+ patterns
+    alt Match found (~70%)
+        Rules-->>Action: Rule result (instant, free)
+    else No match (~30%)
+        Action->>LLM: Send preprocessed context
+        LLM-->>Action: JSON response
+        Action->>Action: Validate against Pydantic schema
+    end
+    Action->>PR: Post root cause + suggested fix
+    Dev->>PR: Read 3-line summary, fix in 5 min
 ```
-1. Developer pushes commit to GitHub
-2. GitHub Actions workflow runs and fails
-3. CIFI Action activates (if: failure())
-4. Reads CI logs from step outputs
-5. Reads source code from $GITHUB_WORKSPACE
-6. Preprocessor extracts error region, builds structured context
-7. Rule engine checks against 50+ patterns
-8.   → Match found? → Use rule result (instant, free)
-9.   → No match?   → Send to LLM via provider abstraction
-10.  → LLM returns JSON → Validate against Pydantic schema
-11. Posts PR comment with root cause + suggested fix
-12. Developer reads 3-line summary, fixes issue in 5 minutes
 ```
 
 ### Tier 2 API (On-Demand Analysis + Persistence)
-```
-1. Client authenticates with API key
-2. Client POSTs log payload to /api/analyze
-3. Preprocessor extracts error region
-4. Hybrid analyzer runs (rules → LLM fallback)
-5. Result stored in PostgreSQL (failures table)
-6. Pattern detector checks for recurring failures (hash match)
-7. Returns structured AnalysisResult JSON
 
-Querying history:
-8. Client GETs /api/failures?repo=X&branch=Y&page=1
-9. Returns paginated failure list with metadata
+```mermaid
+sequenceDiagram
+    actor Client
+    participant Auth as API Key Auth
+    participant API as FastAPI
+    participant Analyzer as Hybrid Analyzer
+    participant DB as PostgreSQL
+
+    Client->>Auth: POST /api/analyze (X-API-Key header)
+    Auth->>API: Authenticated request
+    API->>Analyzer: Preprocess + analyze
+    Analyzer-->>API: AnalysisResult
+    API->>DB: Store failure record
+    API->>DB: Check/update pattern (hash match)
+    API-->>Client: AnalysisResult JSON
+
+    Note over Client,DB: Querying History
+    Client->>Auth: GET /api/failures?repo=X&branch=Y&page=1
+    Auth->>API: Authenticated request
+    API->>DB: Query with filters + pagination
+    DB-->>API: Failure records
+    API-->>Client: Paginated failure list
 ```
 
 ---

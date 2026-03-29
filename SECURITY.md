@@ -1,29 +1,43 @@
 # Security Policy
 
-Security is very important for this project and its community. 🔒
+## Supported Versions
 
-Learn more about it below. 👇
-
-## Versions
-
-The latest version or release is supported.
-
-You are encouraged to write tests for your application and update your versions frequently after ensuring that your tests are passing. This way you will benefit from the latest features, bug fixes, and **security fixes**.
+Only the latest release is supported with security updates.
 
 ## Reporting a Vulnerability
 
-If you think you found a vulnerability, and even if you are not sure about it, please report it right away by sending an email to: security@tiangolo.com. Please try to be as explicit as possible, describing all the steps and example code to reproduce the security issue.
+If you discover a security vulnerability in CIFI, please report it responsibly:
 
-I (the author, [@tiangolo](https://twitter.com/tiangolo)) will review it thoroughly and get back to you.
+1. **Do not** open a public GitHub issue for security vulnerabilities
+2. Email **ali.haidar.2950@gmail.com** with:
+   - A description of the vulnerability
+   - Steps to reproduce
+   - Potential impact
+3. You will receive an acknowledgment within 48 hours
+4. A fix will be prioritized based on severity
 
-## Public Discussions
+## Security Considerations
 
-Please restrain from publicly discussing a potential security vulnerability. 🙊
+### Tier 1 — GitHub Action
+- `GITHUB_TOKEN` is the only required secret — provided automatically by GitHub Actions
+- LLM API keys (if using paid providers) must be stored as GitHub Actions secrets
+- CI logs may contain sensitive data — a scrubbing layer strips secrets before sending to external LLM APIs
+- The rule engine runs entirely locally — no data leaves the GitHub runner
 
-It's better to discuss privately and try to find a solution first, to limit the potential impact as much as possible.
+### Tier 2 — Backend API
+- All endpoints require API key authentication via `X-API-Key` header
+- Input validation on all API endpoints (Pydantic)
+- Rate limiting on analysis endpoints
+- Database credentials managed via environment variables — never committed to source
+- HTTPS enforced via the deployment platform (Fly.io / Railway / Cloud Run)
+
+## Best Practices for Users
+
+- Never hardcode API keys or secrets in workflow files
+- Use GitHub Actions secrets for all sensitive configuration
+- Review the analysis output before acting on suggested fixes
+- If using Ollama (self-hosted LLM), no data leaves your infrastructure
 
 ---
 
-Thanks for your help!
-
-The community and I thank you for that. 🙇
+Thank you for helping keep CIFI and its users safe.

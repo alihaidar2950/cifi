@@ -6,6 +6,61 @@ This document describes the implementation-level design of each CIFI system comp
 
 ---
 
+## Analysis Pipeline Overview
+
+```mermaid
+flowchart TB
+    subgraph ingestion["1. Log Ingestion"]
+        logs["CI Logs\n(step outputs)"]
+        src["Source Code\n($GITHUB_WORKSPACE)"]
+        diff["Git Diff\n(HEAD~1)"]
+        deps["Dependency Files\n(package.json, requirements.txt)"]
+    end
+
+    ingestion --> preprocess
+
+    subgraph preprocess["2. Preprocessor"]
+        strip["Strip ANSI / timestamps"]
+        detect["Detect error boundaries"]
+        extract["Extract stack traces"]
+        truncate["Intelligent truncation\n(error > stack > source > diff)"]
+        strip --> detect --> extract --> truncate
+    end
+
+    preprocess --> analyzer
+
+    subgraph analyzer["3. Hybrid Analyzer"]
+        rules{"Rule Engine\n50+ patterns"}
+        rules -->|"high confidence"| rule_result["RuleMatch result"]
+        rules -->|"no match / low confidence"| llm_call
+
+        subgraph llm_call["LLM Fallback"]
+            prompt["Build structured prompt"]
+            call["Call LLM provider"]
+            validate{"Pydantic validation"}
+            prompt --> call --> validate
+            validate -->|invalid| retry["Retry w/ backoff"]
+            retry --> call
+        end
+    end
+
+    rule_result --> output
+    validate -->|valid| output
+
+    subgraph output["4. Output Router"]
+        pr["PR Comment\n(GitHub API)"]
+        terminal["Terminal\n(local runs)"]
+        api["POST to API\n(optional)"]
+    end
+
+    style ingestion fill:#264653,stroke:#2a9d8f,color:#fff
+    style preprocess fill:#2a9d8f,stroke:#264653,color:#fff
+    style analyzer fill:#e76f51,stroke:#264653,color:#fff
+    style output fill:#0f3460,stroke:#e94560,color:#fff
+```
+
+---
+
 ## Tier 1 Components (GitHub Action)
 
 ### 1. GitHub Action Entry Point
@@ -265,6 +320,47 @@ async def analyze(context: ProcessedContext) -> AnalysisResult:
 ```
 
 #### Multi-Provider LLM Architecture
+
+```mermaid
+classDiagram
+    class LLMProvider {
+        <<Protocol>>
+        +analyze(prompt: str) str
+    }
+    class GitHubModelsProvider {
+        +base_url: str
+        +analyze(prompt: str) str
+    }
+    class ClaudeProvider {
+        +analyze(prompt: str) str
+    }
+    class OpenAIProvider {
+        +analyze(prompt: str) str
+    }
+    class OllamaProvider {
+        +analyze(prompt: str) str
+    }
+
+    LLMProvider <|.. GitHubModelsProvider : implements
+    LLMProvider <|.. ClaudeProvider : implements
+    LLMProvider <|.. OpenAIProvider : implements
+    LLMProvider <|.. OllamaProvider : implements
+
+    class HybridAnalyzer {
+        +rule_engine: RuleEngine
+        +llm_provider: LLMProvider
+        +analyze(context: ProcessedContext) AnalysisResult
+    }
+
+    HybridAnalyzer --> LLMProvider : uses
+    HybridAnalyzer --> RuleEngine : uses
+
+    class RuleEngine {
+        +rules: list~Rule~
+        +match(logs: str) RuleMatch
+    }
+```
+
 ```python
 class LLMProvider(Protocol):
     """Provider-agnostic interface for LLM integration."""
@@ -424,6 +520,41 @@ async def verify_api_key(request: Request) -> None:
 - PostgreSQL
 
 #### Database Schema
+
+```mermaid
+erDiagram
+    FAILURES {
+        uuid id PK
+        varchar repo
+        varchar branch
+        varchar commit_sha
+        int run_id
+        int pr_number
+        varchar failure_type
+        varchar confidence
+        text root_cause
+        text suggested_fix
+        jsonb contributing_factors
+        jsonb relevant_log_lines
+        varchar analysis_method
+        varchar pattern_hash FK
+        timestamp created_at
+    }
+
+    PATTERNS {
+        uuid id PK
+        varchar pattern_hash UK
+        varchar failure_type
+        text root_cause_summary
+        int occurrence_count
+        jsonb repos
+        timestamp first_seen
+        timestamp last_seen
+    }
+
+    PATTERNS ||--o{ FAILURES : "pattern_hash"
+```
+
 ```python
 class Failure(Base):
     __tablename__ = "failures"
@@ -487,16 +618,33 @@ async def check_patterns(db: AsyncSession, result: AnalysisResult, repo: str) ->
 ```
 
 #### Deployment
-```
-Docker Compose (local dev):
-├── cifi-api       (FastAPI app, port 8000)
-└── postgres       (PostgreSQL 16, port 5432)
 
-Production (Fly.io / Railway / Cloud Run):
-├── Docker container (API)
-├── Managed PostgreSQL
-├── Alembic migrations run in CI/CD before deploy
-└── GitHub Actions: lint → test → build → migrate → deploy
+```mermaid
+flowchart LR
+    subgraph local["Local Development"]
+        compose["Docker Compose"]
+        api_local["cifi-api\nPort 8000"]
+        pg_local[("PostgreSQL 16\nPort 5432")]
+        compose --> api_local
+        compose --> pg_local
+        api_local <--> pg_local
+    end
+
+    subgraph prod["Production"]
+        container["Docker Container\n(API)"]
+        pg_prod[("Managed\nPostgreSQL")]
+        container <--> pg_prod
+    end
+
+    subgraph cicd["CI/CD Pipeline"]
+        lint["Lint"] --> test["Test"] --> build["Build"] --> migrate["Migrate"] --> deploy["Deploy"]
+    end
+
+    cicd --> prod
+
+    style local fill:#264653,stroke:#2a9d8f,color:#fff
+    style prod fill:#0f3460,stroke:#e94560,color:#fff
+    style cicd fill:#2d6a4f,stroke:#1b4332,color:#fff
 ```
 
 ---

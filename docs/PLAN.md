@@ -4,6 +4,18 @@
 
 Build an AI-powered CI failure analysis tool — a real AI engineering product with hybrid intelligence, multi-provider LLM integration, and structured prompting:
 
+```mermaid
+flowchart LR
+    p1["Phase 1\nCore Engine\n🧠 AI showcase"] --> p2["Phase 2\nGitHub Action\n🚀 Ship product"]
+    p2 --> p3["Phase 3\nBackend API\n🔧 Backend showcase"]
+    p3 --> p4["Phase 4\nAdoption\n📈 Real users"]
+
+    style p1 fill:#e76f51,stroke:#264653,color:#fff
+    style p2 fill:#2a9d8f,stroke:#264653,color:#fff
+    style p3 fill:#0f3460,stroke:#e94560,color:#fff
+    style p4 fill:#6a4c93,stroke:#264653,color:#fff
+```
+
 - **Phase 1 — Core Engine**: Python package with hybrid AI analysis (rule engine + multi-provider LLM fallback). Structured prompting, Pydantic validation, provider-agnostic architecture. **The AI engineering showcase.**
 - **Phase 2 — GitHub Action**: Package the engine as a GitHub Action. 3 lines of YAML, instant value. Publish to Marketplace. **Ship the product.**
 - **Phase 3 — Backend API + Persistence**: Real FastAPI backend with PostgreSQL, API key auth, failure history, pattern detection. Deployed via Docker on a managed platform. **The backend engineering showcase.**
@@ -218,6 +230,46 @@ Phase 3's backend is designed to be extensible — dashboard, CLI, and integrati
 ---
 
 ## Project Structure
+
+```mermaid
+flowchart TB
+    subgraph core["cifi/ — Core Engine"]
+        rules["rules.py\n50+ patterns"]
+        preprocess["preprocessor.py\nLog cleaning"]
+        analyzer["analyzer.py\nHybrid logic"]
+        schemas["schemas.py\nPydantic models"]
+        prompts["prompts.py\nPrompt engineering"]
+        subgraph llm["llm/"]
+            base["base.py (Protocol)"]
+            claude["claude.py"]
+            openai_p["openai.py"]
+            ghmodels["github_models.py"]
+            ollama["ollama.py"]
+        end
+    end
+
+    subgraph action_dir["action/ — GitHub Action"]
+        entry["entrypoint.py"]
+        dockerfile["Dockerfile"]
+        actionyml["action.yml"]
+    end
+
+    subgraph backend_dir["backend/ — API Service"]
+        routers["routers/"]
+        services["services/"]
+        models["models/"]
+        database["database.py"]
+        auth["auth.py"]
+        alembic["alembic/"]
+    end
+
+    core --> action_dir
+    core --> backend_dir
+
+    style core fill:#e76f51,stroke:#264653,color:#fff
+    style action_dir fill:#2a9d8f,stroke:#264653,color:#fff
+    style backend_dir fill:#0f3460,stroke:#e94560,color:#fff
+```
 
 ```
 cifi/               # Core engine: rules, preprocessor, analyzer, schemas
