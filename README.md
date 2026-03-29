@@ -183,18 +183,3 @@ gantt
 ## License
 
 [MIT](LICENSE)
-
----
-
-## Documentation
-
-- [Implementation Plan](docs/PLAN.md) — Phased delivery plan with verification steps
-- [High-Level Design](docs/HLD.md) — Two-tier architecture and component breakdown
-- [Detailed Design](docs/DD.md) — Implementation-level component specifications
-- [North Star](docs/NORTH_STAR.md) — Vision, success criteria, and guiding principles
-
----
-
-## License
-
-See [LICENSE](LICENSE) for details.

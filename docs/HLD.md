@@ -295,7 +295,6 @@ sequenceDiagram
     Action->>PR: Post root cause + suggested fix
     Dev->>PR: Read 3-line summary, fix in 5 min
 ```
-```
 
 ### Tier 2 API (On-Demand Analysis + Persistence)
 
