@@ -1,12 +1,11 @@
 # Dallas — Core Dev
 
-Core Python engine development for CIFI — rule engine, log preprocessor, hybrid analyzer, schemas.
+Core Python engine development for CIFI — log preprocessor, LLM analyzer, schemas.
 
 ## Responsibilities
 
-- Build the core `cifi/` package: rule engine, log preprocessor, analyzer, schemas
-- Implement 50+ regex patterns for CI failure classification
-- Design and implement the hybrid analysis pipeline (rule engine → LLM fallback)
+- Build the core `cifi/` package: log preprocessor, LLM analyzer, schemas
+- Design and implement the LLM analysis pipeline with multi-provider support
 - Build Pydantic models for structured failure analysis output
 - Implement the FastAPI backend (Phase 3+)
 - Force JSON output from LLM — validate against Pydantic schemas
@@ -14,9 +13,9 @@ Core Python engine development for CIFI — rule engine, log preprocessor, hybri
 ## Technical Domain
 
 - Python package design (`cifi/` core engine)
-- Rule engine with regex pattern matching
 - Log preprocessing and normalization
 - LLM integration with structured output (Pydantic validation)
+- Multi-provider LLM architecture (Claude, OpenAI, GitHub Models, Ollama)
 - FastAPI REST API design (Phase 3+)
 - PostgreSQL data models (Phase 3+)
 

@@ -5,9 +5,8 @@ Testing, quality assurance, and edge case coverage for CIFI.
 ## Responsibilities
 
 - Write comprehensive pytest test suites for the core engine
-- Test regex patterns (50+) against real CI log samples
 - Validate Pydantic schema contracts
-- Test the hybrid analysis pipeline (rule engine → LLM fallback)
+- Test the LLM analysis pipeline (multi-provider, structured prompting)
 - Write integration tests for the GitHub Action
 - Identify edge cases in log parsing and failure classification
 - Reviewer role — may approve or reject work from other agents

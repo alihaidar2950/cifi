@@ -2,12 +2,12 @@
 
 ## System Overview
 
-CIFI is an **AI-powered CI failure analysis agent** built on a two-tier architecture with a **hybrid AI analysis core**:
+CIFI is an **AI-powered CI failure analysis agent** built on a two-tier architecture with a **multi-provider LLM analysis core**:
 
-- **Tier 1 — GitHub Action** (embedded in target repos): Runs inside the CI pipeline itself, has full access to source code, logs, and test output. Performs hybrid analysis (rule engine first, multi-provider LLM fallback) and posts results as PR comments. Zero infrastructure required — just add the Action to your workflow.
+- **Tier 1 — GitHub Action** (embedded in target repos): Runs inside the CI pipeline itself, has full access to source code, logs, and test output. Performs LLM analysis (multi-provider, structured prompting, Pydantic validation) and posts results as PR comments. Zero infrastructure required — just add the Action to your workflow.
 - **Tier 2 — Backend API** (optional, deployed via Docker): A real FastAPI backend with PostgreSQL persistence, API key auth, failure history, and pattern detection. Receives results from Tier 1 Actions, stores them, detects recurring patterns, and exposes a RESTful API.
 
-The core AI engineering is in the **hybrid analysis engine**: a two-stage architecture that combines deterministic pattern matching (50+ rules, instant, free) with multi-provider LLM intelligence (Claude, OpenAI, GitHub Models, Ollama) for complex failures. The backend engineering is in **Tier 2**: a production-grade API with database persistence, authentication, and algorithmic pattern detection.
+The core AI engineering is in the **LLM analysis engine**: a multi-provider architecture (Claude, OpenAI, GitHub Models, Ollama) with structured prompting, JSON enforcement, and Pydantic validation for production-grade output. The backend engineering is in **Tier 2**: a production-grade API with database persistence, authentication, and algorithmic pattern detection.
 
 ---
 
@@ -25,12 +25,9 @@ flowchart TB
             source["Source Code\nContext"] --> preprocess
             preprocess --> analyzer
 
-            subgraph analyzer["Hybrid AI Analyzer"]
+            subgraph analyzer["LLM Analyzer"]
                 direction TB
-                rules["Stage 1: Rule Engine\n50+ patterns · instant · free\n~70% coverage"]
-                rules -->|miss?| llm_stage
-
-                subgraph llm_stage["Stage 2: Multi-Provider LLM"]
+                subgraph llm_stage["Multi-Provider LLM"]
                     providers["Claude | OpenAI | GitHub Models | Ollama"]
                     validation["Structured Prompting\nJSON Enforcement\nPydantic Validation"]
                 end
@@ -46,7 +43,7 @@ flowchart TB
     subgraph tier2["Tier 2 — Backend API (Docker + managed platform)"]
         direction TB
         fastapi["FastAPI + PostgreSQL"]
-        endpoints["POST /api/analyze — hybrid analyzer\nGET /api/failures — history + filtering\nGET /api/patterns — recurring failures\nGET /api/health"]
+        endpoints["POST /api/analyze — LLM analyzer\nGET /api/failures — history + filtering\nGET /api/patterns — recurring failures\nGET /api/health"]
         infra["API Key Auth · SQLAlchemy ORM · Alembic"]
     end
 
@@ -60,7 +57,7 @@ flowchart TB
 ## Tier 1 — GitHub Action (Embedded Analysis)
 
 ### What It Does
-Runs as a step in the target repo's GitHub Actions workflow. When a preceding step fails, CIFI activates, reads logs and source code directly from the checkout, analyzes the failure using the hybrid AI engine, and posts a PR comment with the root cause and suggested fix.
+Runs as a step in the target repo's GitHub Actions workflow. When a preceding step fails, CIFI activates, reads logs and source code directly from the checkout, analyzes the failure using the LLM analysis engine, and posts a PR comment with the root cause and suggested fix.
 
 ### Why Embedded
 The critical insight: a webhook-based server can only access what the GitHub API exposes — logs, diffs, and PR metadata. It cannot see the full source code, dependency files, test fixtures, or configuration that often hold the real root cause. By running inside the CI pipeline, CIFI has the full checkout at its disposal.
@@ -69,11 +66,10 @@ The critical insight: a webhook-based server can only access what the GitHub API
 1. The Action reads CI logs from `$GITHUB_STEP_SUMMARY` or step output files
 2. Log ingestion reads source code directly from the workspace (`$GITHUB_WORKSPACE`)
 3. Preprocessor strips noise, extracts error regions, builds structured context
-4. Rule engine matches against 50+ known failure patterns (no API call needed)
-5. If no rule matches with high confidence, falls back to multi-provider LLM analysis
-6. LLM response validated against Pydantic schema — malformed responses retried
-7. Posts structured analysis as a PR comment via GitHub API
-8. Optionally sends results to Tier 2 API
+4. Multi-provider LLM analyzes the preprocessed context with structured prompting
+5. LLM response validated against Pydantic schema — malformed responses retried
+6. Posts structured analysis as a PR comment via GitHub API
+7. Optionally sends results to Tier 2 API
 
 ### Usage (3 lines in a workflow)
 ```yaml
@@ -122,21 +118,12 @@ These are separate projects:
 
 ---
 
-## Hybrid AI Analysis — The Core Architecture
+## LLM Analysis — The Core Architecture
 
-This is the heart of CIFI and the primary AI engineering showcase. The hybrid approach demonstrates production-grade AI system design, not just "wrap an LLM API."
+This is the heart of CIFI and the primary AI engineering showcase. The multi-provider LLM architecture demonstrates production-grade AI system design, not just "wrap an LLM API."
 
-### Stage 1 — Rule Engine (Free, Instant)
-A pattern-matching engine with 50+ rules covering common CI failure modes:
-- **Test failures**: assertion errors, import errors, fixture issues, timeout
-- **Build errors**: syntax errors, missing dependencies, type errors, compilation failures
-- **Infrastructure errors**: network timeouts, service unavailable, disk space, OOM
-- **Configuration errors**: missing env vars, invalid YAML, permission denied
-
-Each rule is a regex pattern + failure type + confidence + suggested fix template. When a rule matches with high confidence, CIFI skips the LLM entirely.
-
-### Stage 2 — Multi-Provider LLM (Complex Cases)
-When no rule matches or confidence is low, CIFI sends preprocessed context to an LLM via a provider-agnostic architecture:
+### Multi-Provider LLM Integration
+CIFI sends preprocessed context to an LLM via a provider-agnostic architecture:
 
 - **GitHub Models API** — Free via `GITHUB_TOKEN` (available in Actions by default)
 - **Claude API** — Higher quality, pay-per-use
@@ -153,17 +140,16 @@ Each provider implements a shared Python protocol, making the system extensible.
 - Retry with exponential backoff on validation failures
 - Few-shot examples for edge cases
 
-### Why Hybrid
+### Why LLM-Powered
 | Approach | Speed | Cost | Accuracy | Coverage |
 |---|---|---|---|---|
-| Rules only | Instant | Free | High (when matched) | ~70% of failures |
-| LLM only | 3-10s | $0.01-0.05/call | High | ~95% of failures |
-| **Hybrid** | **Instant for 70%, 3-10s for 30%** | **$0 for 70%, paid for 30%** | **High** | **~95%** |
+| **Multi-Provider LLM** | **3-10s** | **Free via GitHub Models** | **High** | **~95% of failures** |
+
+By using GitHub Models API (free via `GITHUB_TOKEN`), CIFI provides high-quality analysis at zero cost for most users. Teams that need higher quality can switch to Claude or OpenAI. Teams with privacy requirements can use Ollama for fully local analysis.
 
 ### AI Engineering Decisions
 | Decision | Rationale |
 |---|---|
-| Rules before LLM | Cost optimization + speed. Real AI systems use the cheapest viable method first. |
 | Provider-agnostic design | Protocol-based abstraction. Not locked to any vendor. |
 | Pydantic validation | Production-grade output handling. Malformed responses are caught and retried. |
 | Structured prompting | Explicit JSON format, role definitions, context prioritization. Not "summarize this log." |
@@ -190,30 +176,23 @@ Cleans and structures raw data before analysis:
 - Build structured context object
 - **Key insight**: The quality of AI analysis is directly proportional to preprocessing quality. This is where most engineering work lives.
 
-### 3. Rule Engine (Tier 1)
-Pattern-matching engine for common failures:
-- 50+ regex-based rules organized by failure category
-- Each rule: pattern, failure_type, confidence, fix_template
-- Deterministic, no external API calls, instant results
-- Extensible — users can add custom rules
-
-### 4. Multi-Provider LLM Integration (Tier 1)
-Provider-agnostic LLM analysis for complex failures:
+### 3. LLM Analyzer (Tier 1)
+Multi-provider LLM analysis engine:
 - Python protocol class defining the provider interface
 - Individual implementations: Claude, OpenAI, GitHub Models, Ollama
 - Structured system prompt + preprocessed context
 - Force JSON output, validate against Pydantic schema
 - Retry with backoff on transient failures
 
-### 5. Output Router (Tier 1)
+### 4. Output Router (Tier 1)
 Delivers analysis results:
 - **PR Comment** (Tier 1): Markdown summary posted via GitHub API
 - **Terminal** (local): Rich terminal output for local runs
 - **Tier 2 API** (optional): POSTs result to backend for storage and pattern tracking
 
-### 6. Backend API (Phase 3)
+### 5. Backend API (Phase 3)
 FastAPI service with PostgreSQL:
-- `POST /api/analyze` — accepts log payload, runs hybrid analyzer, stores result, returns analysis
+- `POST /api/analyze` — accepts log payload, runs LLM analyzer, stores result, returns analysis
 - `GET /api/failures` — list stored failures with pagination + filtering (repo, branch, date range)
 - `GET /api/failures/{id}` — single failure detail
 - `GET /api/patterns` — recurring failure patterns (hash-based detection)
@@ -274,7 +253,6 @@ sequenceDiagram
     actor Dev as Developer
     participant GH as GitHub Actions
     participant Action as CIFI Action
-    participant Rules as Rule Engine
     participant LLM as LLM Provider
     participant PR as PR Comment
 
@@ -284,14 +262,9 @@ sequenceDiagram
     Action->>Action: Read CI logs from step outputs
     Action->>Action: Read source code from $GITHUB_WORKSPACE
     Action->>Action: Preprocess: extract errors, build context
-    Action->>Rules: Check against 50+ patterns
-    alt Match found (~70%)
-        Rules-->>Action: Rule result (instant, free)
-    else No match (~30%)
-        Action->>LLM: Send preprocessed context
-        LLM-->>Action: JSON response
-        Action->>Action: Validate against Pydantic schema
-    end
+    Action->>LLM: Send preprocessed context
+    LLM-->>Action: JSON response
+    Action->>Action: Validate against Pydantic schema
     Action->>PR: Post root cause + suggested fix
     Dev->>PR: Read 3-line summary, fix in 5 min
 ```
@@ -303,7 +276,7 @@ sequenceDiagram
     actor Client
     participant Auth as API Key Auth
     participant API as FastAPI
-    participant Analyzer as Hybrid Analyzer
+    participant Analyzer as LLM Analyzer
     participant DB as PostgreSQL
 
     Client->>Auth: POST /api/analyze (X-API-Key header)
@@ -329,7 +302,7 @@ sequenceDiagram
 - `GITHUB_TOKEN` is the only required secret for Tier 1 — provided automatically by GitHub Actions
 - LLM API keys (if using paid providers) stored as GitHub Actions secrets
 - Logs may contain sensitive data — scrubbing layer before sending to external LLM APIs
-- Rule engine runs entirely locally — no data leaves the runner
+- Ollama provider available for fully local analysis — no data leaves the runner
 - API key authentication for Tier 2 endpoints
 - Input validation on all API endpoints
 - Rate limiting on analysis endpoints
@@ -340,7 +313,7 @@ sequenceDiagram
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| **Hybrid AI analysis** | Rule engine first, LLM fallback | 70% of failures resolved instantly for free. Production AI = cost optimization. |
+| **LLM-powered analysis** | Multi-provider LLM with structured prompting | Production-grade AI analysis with provider abstraction and output validation. |
 | **Multi-provider LLM** | Protocol-based abstraction | Vendor-agnostic, extensible, real AI engineering pattern |
 | **Structured prompting** | JSON enforcement + Pydantic | Production-grade LLM integration, not notebook demos |
 | **Embedded in CI** | GitHub Action, not webhook | Solves the context problem — full checkout access |

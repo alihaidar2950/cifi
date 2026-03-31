@@ -25,8 +25,8 @@
 - **Project:** CIFI (CI Failure Intelligence)
 - **Description:** AI-powered CI failure analysis agent with two-tier architecture
 - **Stack:** Python, Pydantic, pytest, FastAPI, React/TypeScript, Docker, Kubernetes (Kustomize), Terraform
-- **Current Phase:** Phase 1 — Core Engine (rule engine, log preprocessor, hybrid analyzer, schemas)
-- **Tier 1:** GitHub Action — embedded in target repos, rule engine + LLM fallback, posts PR comments
+- **Current Phase:** Phase 1 — Core Engine (log preprocessor, LLM analyzer, schemas)
+- **Tier 1:** GitHub Action — embedded in target repos, multi-provider LLM analysis, posts PR comments
 - **Tier 2 (optional):** FastAPI + PostgreSQL on EKS — aggregation, dashboard, MCP server, CLI
 - **Key Docs:** docs/PLAN.md, docs/HLD.md, docs/DD.md, docs/NORTH_STAR.md
 - **Created:** 2026-03-25

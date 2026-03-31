@@ -6,7 +6,7 @@ How to decide who handles what.
 
 | Work Type | Route To | Examples |
 |-----------|----------|----------|
-| Core engine (rule engine, preprocessor, analyzer, schemas) | Dallas | Build regex patterns, implement analyzer, Pydantic models |
+| Core engine (preprocessor, analyzer, schemas) | Dallas | Implement LLM analyzer, Pydantic models |
 | FastAPI backend, API design, database models | Dallas | REST endpoints, PostgreSQL schemas, data layer |
 | GitHub Action, Docker, CI/CD | Parker | action.yml, Dockerfile, workflow files |
 | Kubernetes, Terraform, infrastructure | Parker | K8s manifests, EKS setup, deployment configs |

@@ -13,7 +13,7 @@ Architecture, code review, and technical decisions for CIFI.
 ## Technical Domain
 
 - Two-tier architecture: Tier 1 (GitHub Action, zero-infra) and Tier 2 (FastAPI + PostgreSQL on EKS)
-- Hybrid analysis: rule engine first (free, instant), LLM fallback for complex failures
+- LLM-powered analysis: multi-provider LLM with structured prompting and Pydantic validation
 - Pydantic schemas for structured output
 - Python package design and API surface
 - Cross-cutting concerns: error handling, logging, configuration

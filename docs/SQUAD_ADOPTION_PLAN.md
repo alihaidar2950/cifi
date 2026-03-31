@@ -31,10 +31,10 @@ CIFI has properties that make it an ideal Squad candidate:
 - **Handles**: Architecture questions, phase readiness reviews, component interface design.
 
 ### 2. **Engine** — Core Python Engine (`cifi/`)
-- **Role**: Core engine developer. Owns the rule engine, preprocessor, analyzer, and schemas.
-- **Expertise**: Python, regex pattern matching, log parsing, Pydantic, LLM prompt engineering.
+- **Role**: Core engine developer. Owns the preprocessor, LLM analyzer, and schemas.
+- **Expertise**: Python, log parsing, Pydantic, LLM prompt engineering.
 - **Reads**: `cifi/` source, `docs/DD.md` (Tier 1 components section)
-- **Handles**: Rule patterns, preprocessor logic, hybrid analyzer, schema changes, LLM integration.
+- **Handles**: Preprocessor logic, LLM analyzer, schema changes, LLM integration.
 
 ### 3. **Action** — GitHub Action (`action/`)
 - **Role**: GitHub Action developer. Owns the Tier 1 packaging and delivery.
@@ -134,10 +134,10 @@ Each agent's `charter.md` should reference the relevant CIFI docs so the agent s
 You are the core engine developer for CIFI, an AI-powered CI failure analysis tool.
 
 ## Expertise
-- Python, regex pattern matching, log parsing
+- Python, log parsing
 - Pydantic schema design
 - LLM prompt engineering (structured JSON output)
-- Hybrid analysis: rule engine first, LLM fallback
+- Multi-provider LLM integration
 
 ## Key References
 - `docs/DD.md` — Detailed design, especially Tier 1 components
@@ -147,7 +147,7 @@ You are the core engine developer for CIFI, an AI-powered CI failure analysis to
 ## Conventions
 - All changes go through the root Makefile
 - Force JSON output from LLM — validate against Pydantic schemas
-- Rule engine handles ~70% of failures; LLM is the fallback
+- LLM-powered analysis with multi-provider support
 - No hardcoded secrets — use environment variables
 ```
 
@@ -156,8 +156,8 @@ You are the core engine developer for CIFI, an AI-powered CI failure analysis to
 In VS Code, open Copilot Chat and invoke the Squad agent:
 
 ```
-@squad I'm building the Phase 1 core engine. Let's start with the rule engine in cifi/rules.py.
-Engine, implement 10 initial regex patterns for common pytest failures.
+@squad I'm building the Phase 1 core engine. Let's start with the preprocessor in cifi/preprocessor.py.
+Engine, implement the log preprocessing pipeline.
 ```
 
 Or use the CLI:
@@ -182,11 +182,11 @@ Anyone who clones the repo gets the full team with accumulated knowledge.
 
 ### 1. Parallel Phase 1 Development
 ```
-You: "Team, let's build Phase 1. Engine — start with the rule engine.
+You: "Team, let's build Phase 1. Engine — start with the preprocessor.
       Tester — create failure log fixtures. Lead — review the DD and flag any gaps."
 
   🏗️ Lead — reviewing DD.md for completeness...
-  🔧 Engine — writing cifi/rules.py patterns...
+  🔧 Engine — writing cifi/preprocessor.py...
   🧪 Tester — creating test fixtures...
 ```
 
@@ -202,13 +202,12 @@ When CIFI has GitHub issues, Squad can auto-triage them to the right agent based
 ```bash
 squad triage --interval 10
 ```
-An issue about "rule engine false positive" gets routed to Engine; "dashboard chart broken" goes to Frontend.
+An issue about "LLM analysis inaccuracy" gets routed to Engine; "dashboard chart broken" goes to Frontend.
 
 ### 4. Decision Logging
 Every architectural decision gets recorded in `.squad/decisions.md`:
 - "Using Pydantic v2 for schema validation"
 - "GitHub Models API as default LLM provider (free with GITHUB_TOKEN)"
-- "Rule engine confidence threshold: 0.8 before attempting LLM fallback"
 
 This becomes a living ADR (Architecture Decision Record) that agents reference.
 

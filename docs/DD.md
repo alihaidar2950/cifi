@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This document describes the implementation-level design of each CIFI system component. It complements the HLD by going deeper into interfaces, data flows, and technology choices. The core AI engineering lives in the hybrid analyzer and multi-provider LLM integration.
+This document describes the implementation-level design of each CIFI system component. It complements the HLD by going deeper into interfaces, data flows, and technology choices. The core AI engineering lives in the LLM analyzer and multi-provider LLM integration.
 
 ---
 
@@ -29,12 +29,8 @@ flowchart TB
 
     preprocess --> analyzer
 
-    subgraph analyzer["3. Hybrid Analyzer"]
-        rules{"Rule Engine\n50+ patterns"}
-        rules -->|"high confidence"| rule_result["RuleMatch result"]
-        rules -->|"no match / low confidence"| llm_call
-
-        subgraph llm_call["LLM Fallback"]
+    subgraph analyzer["3. LLM Analyzer"]
+        subgraph llm_call["Multi-Provider LLM"]
             prompt["Build structured prompt"]
             call["Call LLM provider"]
             validate{"Pydantic validation"}
@@ -44,7 +40,6 @@ flowchart TB
         end
     end
 
-    rule_result --> output
     validate -->|valid| output
 
     subgraph output["4. Output Router"]
@@ -72,7 +67,7 @@ flowchart TB
 
 #### Responsibilities
 - Read CI failure context from the GitHub Actions environment
-- Orchestrate the analysis pipeline: ingestion → preprocessing → hybrid analysis
+- Orchestrate the analysis pipeline: ingestion → preprocessing → LLM analysis
 - Post results as a PR comment
 - Optionally POST results to Tier 2 API
 
@@ -86,7 +81,7 @@ inputs:
     required: true
     default: ${{ github.token }}
   llm-provider:
-    description: 'LLM provider for complex failures: github-models, claude, openai, ollama'
+    description: 'LLM provider: github-models, claude, openai, ollama'
     required: false
     default: 'github-models'
   llm-api-key:
@@ -112,8 +107,8 @@ async def main():
     # 3. Preprocess
     processed = preprocess(failure_context, max_tokens=8000)
 
-    # 4. Hybrid analysis
-    result = await analyze(processed)  # rules first, LLM fallback
+    # 4. LLM analysis
+    result = await analyze(processed)  # multi-provider LLM analysis
 
     # 5. Post PR comment
     post_pr_comment(context.pr_number, format_comment(result))
@@ -203,90 +198,15 @@ The quality of analysis output is directly proportional to the quality of input.
 
 ---
 
-### 4. Rule Engine
-
-#### Tech
-- Python module: `cifi/rules.py`
-- Pure regex patterns, no external dependencies
-
-#### Responsibilities
-- Match CI log content against 50+ known failure patterns
-- Return high-confidence analysis instantly without API calls
-- Provide fix templates for common failures
-
-#### Interface
-```python
-@dataclass
-class Rule:
-    id: str                    # e.g. "test_assertion_error"
-    category: str              # test_failure, build_error, infra_error, config_error
-    pattern: re.Pattern        # Compiled regex
-    failure_type: str          # Maps to AnalysisResult.failure_type
-    confidence: str            # "high" or "medium"
-    root_cause_template: str   # Template with {match_groups}
-    fix_template: str          # Suggested fix template
-
-@dataclass
-class RuleMatch:
-    rule: Rule
-    matched_text: str
-    groups: dict[str, str]     # Named capture groups
-
-class RuleEngine:
-    def __init__(self, rules: list[Rule] | None = None):
-        self.rules = rules or load_default_rules()
-
-    def match(self, logs: str) -> RuleMatch | None:
-        """Return the highest-confidence match, or None."""
-        ...
-
-    def match_all(self, logs: str) -> list[RuleMatch]:
-        """Return all matches, sorted by confidence."""
-        ...
-```
-
-#### Rule Categories (50+ rules)
-| Category | Examples | Count |
-|---|---|---|
-| Test failures | AssertionError, ImportError, fixture not found, timeout | ~15 |
-| Build errors | SyntaxError, ModuleNotFoundError, TypeScript errors, compilation failed | ~15 |
-| Infrastructure | Connection refused, DNS resolution failed, disk full, OOM killed | ~10 |
-| Configuration | Missing env var, invalid YAML/JSON, permission denied, file not found | ~10 |
-
-#### Example Rules
-```python
-Rule(
-    id="test_assertion_error",
-    category="test_failure",
-    pattern=re.compile(r"AssertionError: (?P<assertion>.+)"),
-    failure_type="test_failure",
-    confidence="high",
-    root_cause_template="Test assertion failed: {assertion}",
-    fix_template="Check the assertion in the failing test — the expected value may need updating.",
-),
-Rule(
-    id="missing_dependency",
-    category="build_error",
-    pattern=re.compile(r"ModuleNotFoundError: No module named '(?P<module>[^']+)'"),
-    failure_type="build_error",
-    confidence="high",
-    root_cause_template="Missing Python dependency: {module}",
-    fix_template="Add '{module}' to requirements.txt or pyproject.toml and install it.",
-),
-```
-
----
-
-### 5. Hybrid Analyzer
+### 4. LLM Analyzer
 
 #### Tech
 - Python module: `cifi/analyzer.py`
-- Rule engine (built-in) + multi-provider LLM integration
+- Multi-provider LLM integration
 - Pydantic for output validation
 
 #### Responsibilities
-- Run rule engine first — if high-confidence match, return immediately (free, instant)
-- Fall back to LLM for complex or unmatched failures
+- Send preprocessed context to LLM with structured prompting
 - Parse and validate LLM JSON response against output schema
 - Retry with exponential backoff on transient LLM failures or validation errors
 
@@ -299,24 +219,12 @@ class AnalysisResult(BaseModel):
     contributing_factors: list[str]
     suggested_fix: str                 # Specific actionable suggestion
     relevant_log_lines: list[str]
-    analysis_method: Literal["rule_engine", "llm"]  # How was this analyzed?
 
 async def analyze(context: ProcessedContext) -> AnalysisResult:
-    """Hybrid analysis: rules first, LLM fallback."""
-    # Try rule engine
-    match = rule_engine.match(context.error_region)
-    if match and match.rule.confidence == "high":
-        return AnalysisResult(
-            failure_type=match.rule.failure_type,
-            confidence=match.rule.confidence,
-            root_cause=match.rule.root_cause_template.format(**match.groups),
-            suggested_fix=match.rule.fix_template.format(**match.groups),
-            analysis_method="rule_engine",
-            ...
-        )
-
-    # Fall back to LLM
-    return await llm_analyze(context)
+    """Analyze failure using multi-provider LLM."""
+    prompt = build_prompt(context)
+    response = await llm_provider.analyze(prompt)
+    return AnalysisResult.model_validate_json(response)
 ```
 
 #### Multi-Provider LLM Architecture
@@ -346,19 +254,12 @@ classDiagram
     LLMProvider <|.. OpenAIProvider : implements
     LLMProvider <|.. OllamaProvider : implements
 
-    class HybridAnalyzer {
-        +rule_engine: RuleEngine
+    class Analyzer {
         +llm_provider: LLMProvider
         +analyze(context: ProcessedContext) AnalysisResult
     }
 
-    HybridAnalyzer --> LLMProvider : uses
-    HybridAnalyzer --> RuleEngine : uses
-
-    class RuleEngine {
-        +rules: list~Rule~
-        +match(logs: str) RuleMatch
-    }
+    Analyzer --> LLMProvider : uses
 ```
 
 ```python
@@ -407,7 +308,7 @@ def build_prompt(context: ProcessedContext, max_tokens: int = 8000) -> str:
 
 ---
 
-### 6. Output Router (Tier 1)
+### 5. Output Router (Tier 1)
 
 #### Tech
 - Python module: `cifi/output.py`
@@ -417,7 +318,7 @@ def build_prompt(context: ProcessedContext, max_tokens: int = 8000) -> str:
 ```markdown
 ## 🔍 CIFI — CI Failure Analysis
 
-**Failure Type**: `test_failure` | **Confidence**: `high` | **Method**: `rule_engine`
+**Failure Type**: `test_failure` | **Confidence**: `high`
 
 **Root Cause**: The `test_user_creation` test fails because the email
 validation regex was updated but the test fixture still uses an old format.
@@ -430,14 +331,14 @@ to use a valid email format matching the new regex.
 > tests/test_users.py::test_user_creation FAILED
 
 ---
-<sub>Analyzed by [CIFI](https://github.com/alihaidar2950/cifi) · Rule engine match · 0.02s</sub>
+<sub>Analyzed by [CIFI](https://github.com/alihaidar2950/cifi)</sub>
 ```
 
 ---
 
 ## Tier 2 — Backend API
 
-### 7. API Service (Phase 3)
+### 6. API Service (Phase 3)
 
 #### Tech
 - FastAPI application in `backend/`
@@ -447,7 +348,7 @@ to use a valid email format matching the new regex.
 - Docker + Docker Compose
 
 #### Responsibilities
-- Expose the hybrid analyzer as a REST API (on-demand analysis)
+- Expose the LLM analyzer as a REST API (on-demand analysis)
 - Receive and store analysis results from Tier 1 Actions
 - Persist failure history in PostgreSQL
 - Detect recurring failure patterns via hash-based matching
@@ -458,7 +359,7 @@ to use a valid email format matching the new regex.
 # Analysis
 @router.post("/api/analyze")
 async def analyze_logs(payload: AnalyzeRequest, db: AsyncSession) -> AnalysisResult:
-    """Run hybrid analyzer, store result, return analysis."""
+    """Run LLM analyzer, store result, return analysis."""
     context = preprocess(payload.logs, payload.source_files)
     result = await analyze(context)
     await store_failure(db, result, payload.metadata)
@@ -571,7 +472,7 @@ class Failure(Base):
     suggested_fix: Mapped[str] = mapped_column(Text)
     contributing_factors: Mapped[list[str]] = mapped_column(JSONB)
     relevant_log_lines: Mapped[list[str]] = mapped_column(JSONB)
-    analysis_method: Mapped[str] = mapped_column(String(20))  # rule_engine | llm
+    analysis_method: Mapped[str] = mapped_column(String(20))  # llm provider used
     pattern_hash: Mapped[str] = mapped_column(String(64), index=True)  # SHA-256
     created_at: Mapped[datetime] = mapped_column(default=func.now(), index=True)
 

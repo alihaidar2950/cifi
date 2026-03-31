@@ -7,7 +7,6 @@ active_issues: []
 # What We're Focused On
 
 Phase 1 — building the core `cifi/` engine package:
-- Rule engine with 50+ regex patterns for CI failure classification
 - Log preprocessor for normalizing CI output
-- Hybrid analyzer (rule engine first, LLM fallback)
+- Multi-provider LLM analyzer with structured prompting
 - Pydantic schemas for structured failure analysis output

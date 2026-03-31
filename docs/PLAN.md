@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-Build an AI-powered CI failure analysis tool — a real AI engineering product with hybrid intelligence, multi-provider LLM integration, and structured prompting:
+Build an AI-powered CI failure analysis tool — a real AI engineering product with multi-provider LLM integration and structured prompting:
 
 ```mermaid
 flowchart LR
@@ -16,7 +16,7 @@ flowchart LR
     style p4 fill:#6a4c93,stroke:#264653,color:#fff
 ```
 
-- **Phase 1 — Core Engine**: Python package with hybrid AI analysis (rule engine + multi-provider LLM fallback). Structured prompting, Pydantic validation, provider-agnostic architecture. **The AI engineering showcase.**
+- **Phase 1 — Core Engine**: Python package with multi-provider LLM analysis. Structured prompting, Pydantic validation, provider-agnostic architecture. **The AI engineering showcase.**
 - **Phase 2 — GitHub Action**: Package the engine as a GitHub Action. 3 lines of YAML, instant value. Publish to Marketplace. **Ship the product.**
 - **Phase 3 — Backend API + Persistence**: Real FastAPI backend with PostgreSQL, API key auth, failure history, pattern detection. Deployed via Docker on a managed platform. **The backend engineering showcase.**
 - **Phase 4 — Adoption + Growth**: Real users, blog post, demo content, marketplace traction. **Prove it solves a real problem.**
@@ -27,40 +27,37 @@ Phases 1-2 prove you can design AI-powered tools. Phase 3 proves you can build a
 
 ---
 
-## Phase 1: Core Engine — Hybrid AI Analysis
+## Phase 1: Core Engine — Multi-Provider LLM Analysis
 
-**Goal**: Build the `cifi/` Python package — an AI-powered analysis engine with a hybrid architecture that combines deterministic pattern matching with multi-provider LLM intelligence.
+**Goal**: Build the `cifi/` Python package — an AI-powered analysis engine with multi-provider LLM intelligence, structured prompting, and production-grade output validation.
 
 **Steps**:
 1. Create `cifi/` package with clean module structure
-2. `cifi/rules.py` — Rule engine: 50+ regex patterns covering common CI failure modes (test failures, build errors, infra errors, config errors). Each rule has: pattern, failure_type, confidence, fix_template
-3. `cifi/preprocessor.py` — Intelligent log preprocessing: strip ANSI codes/timestamps, detect error boundaries, extract stack traces and assertion failures, truncate intelligently to fit LLM context window. This is where the real engineering lives — quality of analysis depends on quality of preprocessing.
-4. `cifi/analyzer.py` — Hybrid analyzer: run rule engine first (free, instant), fall back to LLM if no high-confidence match. Provider-agnostic LLM integration supporting GitHub Models API, Claude, OpenAI, and Ollama via a shared protocol
-5. `cifi/schemas.py` — Pydantic models: `AnalysisResult` (failure_type, confidence, root_cause, contributing_factors, suggested_fix, relevant_log_lines). Force structured JSON output from LLM — always validate against schema
-6. `cifi/llm/` — Multi-provider LLM integration: `base.py` (provider protocol), `github_models.py`, `claude.py`, `openai_provider.py`, `ollama.py`. Each provider handles auth, request formatting, response parsing, and retries
-7. `cifi/prompts.py` — Prompt engineering: system prompt design, context window management, few-shot examples for edge cases, output format enforcement
-8. `cifi/config.py` — Configuration: LLM provider, model, API keys via env vars
-9. `cifi/ingestion.py` — Log ingestion: read CI logs and source code from local filesystem
-10. Tests with realistic failure fixtures (test failures, build errors, infra errors, timeouts)
-11. Root `Makefile` with targets: `test`, `lint`, `analyze-local`
+2. `cifi/preprocessor.py` — Intelligent log preprocessing: strip ANSI codes/timestamps, detect error boundaries, extract stack traces and assertion failures, truncate intelligently to fit LLM context window. This is where the real engineering lives — quality of analysis depends on quality of preprocessing.
+3. `cifi/analyzer.py` — LLM analyzer: provider-agnostic LLM integration supporting GitHub Models API, Claude, OpenAI, and Ollama via a shared protocol. Structured prompting with JSON enforcement and Pydantic validation.
+4. `cifi/schemas.py` — Pydantic models: `AnalysisResult` (failure_type, confidence, root_cause, contributing_factors, suggested_fix, relevant_log_lines). Force structured JSON output from LLM — always validate against schema
+5. `cifi/llm/` — Multi-provider LLM integration: `base.py` (provider protocol), `github_models.py`, `claude.py`, `openai_provider.py`, `ollama.py`. Each provider handles auth, request formatting, response parsing, and retries
+6. `cifi/prompts.py` — Prompt engineering: system prompt design, context window management, few-shot examples for edge cases, output format enforcement
+7. `cifi/config.py` — Configuration: LLM provider, model, API keys via env vars
+8. `cifi/ingestion.py` — Log ingestion: read CI logs and source code from local filesystem
+9. Tests with realistic failure fixtures (test failures, build errors, infra errors, timeouts)
+10. Root `Makefile` with targets: `test`, `lint`, `analyze-local`
 
 **AI Engineering Highlights**:
-- Hybrid architecture: deterministic rules for speed + LLM for depth
 - Provider-agnostic LLM integration via Python protocol classes
 - Structured prompting with JSON enforcement and Pydantic validation
 - Intelligent context window management (prioritize error region > stack trace > source > diff)
 - Few-shot prompt design for edge cases
-- Cost optimization: 70% of failures resolved without LLM call
+- GitHub Models API as default provider — free via `GITHUB_TOKEN`
 
 **Verification**:
-- Rule engine correctly identifies common failure patterns from fixture logs
 - Preprocessor strips noise and extracts error regions
-- Hybrid analyzer uses rules when possible, falls back to LLM
+- LLM analyzer produces accurate root cause analysis from preprocessed context
 - LLM response validated against Pydantic schema — malformed responses caught and retried
 - All tests pass with mocked LLM responses (no API key needed)
 - Manual run with real API key returns valid `AnalysisResult`
 
-**Human Checkpoint**: Review rule patterns, preprocessor quality, prompt design, LLM provider architecture, output schema.
+**Human Checkpoint**: Review preprocessor quality, prompt design, LLM provider architecture, output schema.
 
 ---
 
@@ -70,9 +67,9 @@ Phases 1-2 prove you can design AI-powered tools. Phase 3 proves you can build a
 
 **Steps**:
 1. Create `action.yml` — GitHub Action metadata (name, description, inputs, runs)
-2. `action/entrypoint.py` — Main entry point: read CI logs, read source code from `$GITHUB_WORKSPACE`, run hybrid analyzer, post PR comment
+2. `action/entrypoint.py` — Main entry point: read CI logs, read source code from `$GITHUB_WORKSPACE`, run LLM analyzer, post PR comment
 3. `action/Dockerfile` — Container Action image with cifi package installed
-4. PR comment formatting — Markdown template with failure type, root cause, suggested fix, relevant log lines, analysis method indicator (rule engine vs LLM)
+4. PR comment formatting — Markdown template with failure type, root cause, suggested fix, relevant log lines
 5. GitHub API integration — Post PR comment using `GITHUB_TOKEN` (provided automatically)
 6. GitHub Models API integration — Free LLM fallback using `GITHUB_TOKEN` (zero config)
 7. Create a test repo with intentionally failing workflows for E2E testing
@@ -89,8 +86,7 @@ Phases 1-2 prove you can design AI-powered tools. Phase 3 proves you can build a
 
 **Verification**:
 - Action triggers on CI failure in test repo
-- Rule engine catches common failures instantly (no LLM call)
-- LLM fallback works for complex failures
+- LLM analyzer produces accurate root cause analysis
 - PR comment appears with structured analysis
 - Works without any secrets beyond `GITHUB_TOKEN`
 - Published and installable from GitHub Marketplace
@@ -107,7 +103,7 @@ Phases 1-2 prove you can design AI-powered tools. Phase 3 proves you can build a
 
 ### 3a. API Service
 1. FastAPI app in `backend/` with proper project structure (routers, services, models, database)
-2. `POST /api/analyze` — accepts log payload, runs hybrid analyzer, stores result, returns analysis
+2. `POST /api/analyze` — accepts log payload, runs LLM analyzer, stores result, returns analysis
 3. `GET /api/failures` — list stored failures with pagination, filtering by repo/branch/date range
 4. `GET /api/failures/{id}` — single failure detail
 5. `GET /api/patterns` — recurring failure patterns across repos
@@ -163,7 +159,7 @@ Phases 1-2 prove you can design AI-powered tools. Phase 3 proves you can build a
 **Steps**:
 1. **README**: Architecture diagram, demo GIF, install instructions (3-line quick start), badges
 2. **Action README**: Marketplace listing with clear value prop, all inputs/outputs documented, examples
-3. **Blog post**: Write about the hybrid AI analysis approach — how rule engines and LLMs complement each other
+3. **Blog post**: Write about the multi-provider LLM analysis approach — structured prompting, provider abstraction, and production-grade AI integration
 4. **Demo video**: Record a real CI failure → CIFI analysis → PR comment flow
 5. **Real-world testing**: Add CIFI to 3-5 public repos (your own + open source contributions)
 6. **Security hardening**: Log scrubbing before LLM, input validation audit
@@ -217,8 +213,8 @@ Phase 3's backend is designed to be extensible — dashboard, CLI, and integrati
 
 | Decision | Rationale |
 |---|---|
-| **AI engineering + backend in one project** | Phase 1-2 = AI skills (hybrid analysis, LLM integration, prompting). Phase 3 = backend skills (API design, PostgreSQL, auth, persistence). Both in one coherent product. |
-| **Hybrid analysis (rules + LLM)** | Demonstrates AI engineering judgment: know when to use deterministic code vs. when to use LLM. Cost-optimized. |
+| **AI engineering + backend in one project** | Phase 1-2 = AI skills (multi-provider LLM integration, structured prompting, output validation). Phase 3 = backend skills (API design, PostgreSQL, auth, persistence). Both in one coherent product. |
+| **LLM-powered analysis** | Demonstrates AI engineering depth: multi-provider abstraction, structured prompting, output validation. Production-grade LLM integration. |
 | **Multi-provider LLM architecture** | Provider-agnostic design via Python protocols. Shows real LLM integration experience, not just "call OpenAI API". |
 | **Structured prompting + Pydantic** | Force JSON output, validate against schema. Production-grade LLM integration, not notebook demos. |
 | **Real backend, not a toy** | PostgreSQL + SQLAlchemy + Alembic + API key auth + pagination + pattern detection. This is backend engineering. |
@@ -234,9 +230,8 @@ Phase 3's backend is designed to be extensible — dashboard, CLI, and integrati
 ```mermaid
 flowchart TB
     subgraph core["cifi/ — Core Engine"]
-        rules["rules.py\n50+ patterns"]
         preprocess["preprocessor.py\nLog cleaning"]
-        analyzer["analyzer.py\nHybrid logic"]
+        analyzer["analyzer.py\nLLM analysis"]
         schemas["schemas.py\nPydantic models"]
         prompts["prompts.py\nPrompt engineering"]
         subgraph llm["llm/"]
@@ -272,12 +267,11 @@ flowchart TB
 ```
 
 ```
-cifi/               # Core engine: rules, preprocessor, analyzer, schemas
+cifi/               # Core engine: preprocessor, analyzer, schemas
   llm/              # Multi-provider LLM integration (claude, openai, github-models, ollama)
   prompts.py        # Prompt engineering: system prompts, few-shot examples
-  rules.py          # Rule engine: 50+ patterns
   preprocessor.py   # Log preprocessing and context extraction
-  analyzer.py       # Hybrid analyzer: rules first, LLM fallback
+  analyzer.py       # LLM analyzer: multi-provider, structured prompting
   schemas.py        # Pydantic models for structured output
 action/             # GitHub Action: entrypoint, Dockerfile, action.yml
 backend/            # Backend API service (Phase 3)

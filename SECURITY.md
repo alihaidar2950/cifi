@@ -22,7 +22,7 @@ If you discover a security vulnerability in CIFI, please report it responsibly:
 - `GITHUB_TOKEN` is the only required secret — provided automatically by GitHub Actions
 - LLM API keys (if using paid providers) must be stored as GitHub Actions secrets
 - CI logs may contain sensitive data — a scrubbing layer strips secrets before sending to external LLM APIs
-- The rule engine runs entirely locally — no data leaves the GitHub runner
+- Ollama provider available for fully local analysis — no data leaves the GitHub runner
 
 ### Tier 2 — Backend API
 - All endpoints require API key authentication via `X-API-Key` header

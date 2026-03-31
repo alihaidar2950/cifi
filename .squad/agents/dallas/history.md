@@ -6,8 +6,8 @@ CIFI (CI Failure Intelligence) — AI-powered CI failure analysis agent.
 - **User:** Ali
 - **Stack:** Python, Pydantic, pytest, FastAPI
 - **Current Phase:** Phase 1 — Core Engine
-- **Core package:** `cifi/` — rule engine, log preprocessor, hybrid analyzer, schemas
-- **Key principle:** Rule engine first (free, instant), LLM fallback for complex failures
+- **Core package:** `cifi/` — log preprocessor, LLM analyzer, schemas
+- **Key principle:** LLM-powered analysis with multi-provider support, structured prompting
 - **Output:** Always JSON, validated against Pydantic schemas
 
 ## Learnings

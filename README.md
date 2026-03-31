@@ -9,8 +9,8 @@ AI-powered CI failure analysis that lives inside your GitHub Actions workflow. A
 When a CI step fails, CIFI:
 
 1. **Reads** logs and source code directly from the checkout (full repo context)
-2. **Matches** against 50+ known failure patterns via rule engine (~70% of failures, instant, free)
-3. **Falls back** to LLM analysis for complex failures (GitHub Models API — free with `GITHUB_TOKEN`)
+2. **Analyzes** failures using multi-provider LLM (GitHub Models API — free with `GITHUB_TOKEN`)
+3. **Validates** all output against Pydantic schemas — structured, reliable results
 4. **Posts** a structured PR comment with root cause + suggested fix
 5. **Tracks** (optional) recurring failure patterns via the backend API
 
@@ -32,7 +32,7 @@ That's it. No API keys, no infrastructure, no configuration.
 
 ## Architecture
 
-CIFI uses a **two-tier architecture** with a **hybrid AI analysis core**:
+CIFI uses a **two-tier architecture** with a **multi-provider LLM analysis core**:
 
 ```mermaid
 flowchart TB
@@ -43,20 +43,15 @@ flowchart TB
         subgraph action["Tier 1 — CIFI GitHub Action"]
             ingest["Log Ingestion\n(local files)"] --> preprocess["Preprocessor"]
             source["Source Code\nContext"] --> preprocess
-            preprocess --> hybrid
+            preprocess --> llm
 
-            subgraph hybrid["Hybrid AI Analyzer"]
-                rules["Stage 1: Rule Engine\n50+ patterns · instant · free\n~70% coverage"]
-                rules -->|miss?| llm
-
-                subgraph llm["Stage 2: Multi-Provider LLM"]
-                    providers["Claude | OpenAI | GitHub Models | Ollama"]
-                    prompt["Structured Prompting\nJSON Enforcement\nPydantic Validation"]
-                end
+            subgraph llm["Multi-Provider LLM Analyzer"]
+                providers["Claude | OpenAI | GitHub Models | Ollama"]
+                prompt["Structured Prompting\nJSON Enforcement\nPydantic Validation"]
             end
 
-            hybrid --> comment["PR Comment\n(GitHub API)"]
-            hybrid -->|optional| api_post["POST to API"]
+            llm --> comment["PR Comment\n(GitHub API)"]
+            llm -->|optional| api_post["POST to API"]
         end
     end
 
@@ -69,42 +64,41 @@ flowchart TB
     end
 
     style action fill:#1a1a2e,stroke:#e94560,color:#fff
-    style hybrid fill:#16213e,stroke:#0f3460,color:#fff
+    style llm fill:#16213e,stroke:#0f3460,color:#fff
     style tier2 fill:#0f3460,stroke:#e94560,color:#fff
 ```
 
 ### Tier 1 — GitHub Action (Embedded)
-Runs inside your CI pipeline. Has full access to source code, logs, and test output. Performs hybrid analysis (rules first, LLM fallback) and posts PR comments. **This is all most teams need.**
+Runs inside your CI pipeline. Has full access to source code, logs, and test output. Analyzes failures using multi-provider LLM with structured prompting and posts PR comments. **This is all most teams need.**
 
 ### Tier 2 — Backend API (Optional)
 A FastAPI backend with PostgreSQL persistence. Stores failure history, detects recurring patterns across repos, and exposes a RESTful API with pagination, filtering, and authentication.
 
 ---
 
-## Hybrid Analysis
+## LLM Analysis
 
 ```mermaid
 flowchart LR
     logs["CI Logs"] --> pre["Preprocessor\nStrip noise · Extract errors"]
-    pre --> re{"Rule Engine\n50+ patterns"}
-    re -->|"match (70%)"| result["AnalysisResult\n(instant, free)"]
-    re -->|"no match (30%)"| llm["LLM Provider\n(3-10s)"]
+    pre --> llm["LLM Provider\n(multi-provider)"]
     llm --> validate["Pydantic\nValidation"]
-    validate -->|valid| result
+    validate -->|valid| result["AnalysisResult"]
     validate -->|invalid| retry["Retry"]
     retry --> llm
 
-    style re fill:#2d6a4f,stroke:#1b4332,color:#fff
     style llm fill:#e76f51,stroke:#264653,color:#fff
     style result fill:#264653,stroke:#2a9d8f,color:#fff
 ```
 
-| Stage | Speed | Cost | Coverage |
-|---|---|---|---|
-| Rule Engine (50+ patterns) | Instant | Free | ~70% of failures |
-| LLM Fallback (GitHub Models) | 3-10s | Free | ~95% of failures |
+| Provider | Speed | Cost |
+|---|---|---|
+| GitHub Models (default) | 3-10s | Free |
+| Claude | 3-10s | Pay-per-use |
+| OpenAI | 3-10s | Pay-per-use |
+| Ollama (self-hosted) | 3-10s | Free (local) |
 
-The rule engine handles common failures (assertion errors, missing dependencies, syntax errors, etc.) without any API call. The LLM is only invoked for complex failures the rules don't cover.
+GitHub Models API is the default provider — free via `GITHUB_TOKEN`, zero configuration needed.
 
 ---
 
@@ -112,7 +106,7 @@ The rule engine handles common failures (assertion errors, missing dependencies,
 
 | Component | Technology |
 |---|---|
-| Core Engine | Python 3.11+, regex rule engine, Pydantic |
+| Core Engine | Python 3.11+, Pydantic |
 | Tier 1 | GitHub Action (Docker container) |
 | LLM Providers | GitHub Models API (free), Claude, OpenAI, Ollama |
 | Backend API | FastAPI, async Python |
@@ -126,7 +120,7 @@ The rule engine handles common failures (assertion errors, missing dependencies,
 ## Project Structure
 
 ```
-cifi/               # Core engine: rules, preprocessor, analyzer, schemas
+cifi/               # Core engine: preprocessor, analyzer, schemas
   llm/              # Multi-provider LLM (claude, openai, github-models, ollama)
 action/             # GitHub Action: entrypoint, Dockerfile, action.yml
 backend/            # Backend API service (Phase 3)
@@ -150,7 +144,7 @@ gantt
     axisFormat %b %Y
 
     section Phase 1
-    Core Engine (rules + preprocessor + hybrid analyzer)  :p1, 2026-03-29, 21d
+    Core Engine (preprocessor + LLM analyzer)  :p1, 2026-03-29, 21d
 
     section Phase 2
     GitHub Action (Tier 1 — PR comments, Marketplace)     :p2, after p1, 14d
@@ -162,7 +156,7 @@ gantt
     Adoption (real users, blog, demo, marketplace)         :p4, after p3, 14d
 ```
 
-- [ ] **Phase 1** — Core Engine: rule engine + preprocessor + hybrid analyzer + multi-provider LLM
+- [ ] **Phase 1** — Core Engine: preprocessor + LLM analyzer + multi-provider LLM
 - [ ] **Phase 2** — GitHub Action: package as Action, PR comments, publish to Marketplace
 - [ ] **Phase 3** — Backend API: FastAPI + PostgreSQL + auth + failure history + pattern detection
 - [ ] **Phase 4** — Adoption: real users, blog post, demo content, marketplace traction

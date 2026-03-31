@@ -1,8 +1,8 @@
 # CIFI — Copilot Instructions
 
-This is **CI Failure Intelligence (CIFI)** — an AI-powered CI failure analysis agent with a hybrid AI analysis core:
+This is **CI Failure Intelligence (CIFI)** — an AI-powered CI failure analysis agent with a multi-provider LLM analysis core:
 
-- **Tier 1 — GitHub Action**: Embedded in target repos. Reads logs + source code from the checkout, runs hybrid AI analysis (rule engine first, multi-provider LLM fallback), posts PR comments. Zero infrastructure.
+- **Tier 1 — GitHub Action**: Embedded in target repos. Reads logs + source code from the checkout, runs LLM analysis (multi-provider, structured prompting, Pydantic validation), posts PR comments. Zero infrastructure.
 - **Tier 2 — Backend API** (Phase 3): FastAPI service with PostgreSQL, API key auth, failure history, pattern detection. Deployed via Docker on a managed platform (Fly.io / Railway / Cloud Run).
 
 ## Key Docs
@@ -13,7 +13,7 @@ This is **CI Failure Intelligence (CIFI)** — an AI-powered CI failure analysis
 - `.github/instrctions/pr-instructions.md` — Agent workflow for commit, push, and pull request actions
 
 ## Current Phase
-Phase 1 — Core Engine (hybrid AI analysis: rule engine + multi-provider LLM + structured prompting)
+Phase 1 — Core Engine (multi-provider LLM analysis + structured prompting)
 
 ## Build Priority
 - Phase 1-2: Core AI Engine + GitHub Action (the AI engineering showcase — ship the product)
@@ -22,7 +22,7 @@ Phase 1 — Core Engine (hybrid AI analysis: rule engine + multi-provider LLM + 
 - Deferred: Deep infrastructure (EKS/Terraform/Kustomize), React dashboard, MCP server, CLI, Slack
 
 ## Project Structure
-- `cifi/` — Core AI engine: rule engine, preprocessor, hybrid analyzer, schemas, multi-provider LLM integration
+- `cifi/` — Core AI engine: preprocessor, LLM analyzer, schemas, multi-provider LLM integration
 - `cifi/llm/` — Multi-provider LLM: base protocol, claude, openai, github-models, ollama
 - `action/` — GitHub Action: entrypoint, Dockerfile, action.yml (Tier 1)
 - `backend/` — Backend API: FastAPI + PostgreSQL + auth + pattern detection (Phase 3)
@@ -30,7 +30,7 @@ Phase 1 — Core Engine (hybrid AI analysis: rule engine + multi-provider LLM + 
 ## Conventions
 - All commands go through the root `Makefile`
 - Two-tier: Tier 1 (GitHub Action) works alone, Backend API with PostgreSQL is Phase 3
-- Hybrid AI analysis: rule engine first (free, instant), multi-provider LLM fallback for complex failures
+- LLM-powered analysis: multi-provider LLM with structured prompting and Pydantic validation
 - Provider-agnostic LLM integration via Python protocol classes
 - Force JSON output from LLM — always validate against Pydantic schema
 - No secrets hardcoded — use env vars and GitHub Actions secrets

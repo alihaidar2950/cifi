@@ -4,7 +4,7 @@
 
 Build an AI-powered CI failure analysis agent that lives inside your GitHub Actions workflow — add 3 lines, get instant root cause analysis on every failure. No infrastructure. No configuration. No log triage.
 
-The core innovation is a **hybrid AI analysis engine**: deterministic rule matching for speed and cost, multi-provider LLM intelligence for depth, structured prompting for reliability, and Pydantic validation for production-grade output. This is AI engineering applied to a real developer problem.
+The core innovation is a **multi-provider LLM analysis engine**: provider-agnostic architecture for multi-provider LLM intelligence, structured prompting for reliability, and Pydantic validation for production-grade output. This is AI engineering applied to a real developer problem.
 
 ---
 
@@ -29,21 +29,17 @@ CIFI runs **inside** your CI pipeline as a GitHub Action. When a step fails, it:
 ```mermaid
 flowchart LR
     fail["CI Step Fails"] --> read["Read logs +\nsource code"]
-    read --> rules{"Rule Engine\n50+ patterns"}
-    rules -->|"match (~70%)"| result["Root cause +\nsuggested fix"]
-    rules -->|"no match (~30%)"| llm["LLM Analysis\n(multi-provider)"]
+    read --> llm["LLM Analysis\n(multi-provider)"]
     llm --> validate["Pydantic\nvalidation"]
-    validate --> result
+    validate --> result["Root cause +\nsuggested fix"]
     result --> comment["PR Comment"]
 
-    style rules fill:#2d6a4f,stroke:#1b4332,color:#fff
     style llm fill:#e76f51,stroke:#264653,color:#fff
     style comment fill:#0f3460,stroke:#e94560,color:#fff
 ```
 
 - Reads the CI logs and source code directly from the checkout (full repo context)
-- Runs a rule engine against 50+ known failure patterns (instant, free)
-- Falls back to multi-provider LLM analysis for complex failures (GitHub Models / Claude / OpenAI / Ollama)
+- Analyzes failures using multi-provider LLM (GitHub Models API — free with `GITHUB_TOKEN`, plus Claude / OpenAI / Ollama)
 - Validates all LLM output against Pydantic schemas — no unstructured text
 - Posts a structured root cause summary + suggested fix as a PR comment
 
@@ -87,15 +83,15 @@ flowchart TB
 
 | Career Goal | How CIFI Serves It |
 |---|---|
-| Demonstrate AI engineering skills | Hybrid AI architecture, multi-provider LLM integration, structured prompting, output validation |
-| Show production-grade AI systems | Not a notebook demo — provider abstraction, retry logic, cost optimization, schema enforcement |
+| Demonstrate AI engineering skills | Multi-provider LLM integration, structured prompting, output validation, provider abstraction |
+| Show production-grade AI systems | Not a notebook demo — provider abstraction, retry logic, schema enforcement |
 | Demonstrate backend engineering | Real API with PostgreSQL, SQLAlchemy, Alembic migrations, API key auth, pagination, filtering |
 | Escape QA/embedded framing | AI-powered developer tool with a real backend, not test execution |
 | Ship a real product | GitHub Marketplace Action with real users and real value |
 | GitHub Actions expertise | Custom Action published to marketplace |
 | Public proof of skills | Fully open-source, demoable, yours to own in interviews |
 | Target Backend / AI / DevProd roles | AI engine + real backend service + developer tool = multiple role signals |
-| Progressive architecture | Hybrid analysis → GitHub Action → Backend API → real adoption |
+| Progressive architecture | LLM analysis → GitHub Action → Backend API → real adoption |
 
 ---
 
@@ -103,7 +99,6 @@ flowchart TB
 
 ### Phase 1-2 — AI-Powered Product (Tier 1 GitHub Action)
 - [ ] GitHub Action that analyzes CI failures with 3 lines of config
-- [ ] Rule engine handles ~70% of common failures instantly (no LLM cost)
 - [ ] Multi-provider LLM integration: GitHub Models (free), Claude, OpenAI, Ollama
 - [ ] Provider-agnostic architecture via Python protocol classes
 - [ ] Structured prompting with JSON enforcement
@@ -128,7 +123,7 @@ flowchart TB
 ### Phase 4 — Adoption
 - [ ] Clean README with demo GIF, architecture diagram, clear quick start
 - [ ] At least 3 repos using CIFI with real failure analyses
-- [ ] Blog post about the hybrid AI analysis approach
+- [ ] Blog post about the multi-provider LLM analysis approach
 - [ ] You can explain the AI architecture, prompt design, backend API design, and database schema in any interview
 
 ### Deferred (Future)
@@ -137,7 +132,6 @@ flowchart TB
 - [ ] CLI tool (`cifi history`, `cifi patterns`, `cifi status`)
 - [ ] MCP server for AI agent integration
 - [ ] Slack integration
-- [ ] Custom rule definitions per repo (`.cifi/rules.yml`)
 
 ---
 
@@ -154,7 +148,7 @@ Scope discipline is a feature. A sharp tool beats a sprawling one every time.
 
 ## Guiding Principles
 
-**AI engineering, not AI wrapper.** This isn't "pipe logs to ChatGPT." It's a hybrid system with rule engines, structured prompting, provider abstraction, output validation, and cost optimization.
+**AI engineering, not AI wrapper.** This isn't "pipe logs to ChatGPT." It's a production system with structured prompting, provider abstraction, output validation, and intelligent context management.
 
 **Backend engineering, not toy API.** Tier 2 has a real database, real auth, real persistence, and real pattern detection. Not just a health check endpoint.
 
@@ -183,7 +177,6 @@ Scope discipline is a feature. A sharp tool beats a sprawling one every time.
 | Tool | Why |
 |---|---|
 | **Python** | Dominant in AI/ML space, strongest language for LLM integration |
-| **Rule Engine (regex)** | Handles 70% of failures instantly, free. Hybrid AI = deterministic + probabilistic. |
 | **Multi-Provider LLM** | Protocol-based abstraction: Claude, OpenAI, GitHub Models, Ollama. Vendor-agnostic. |
 | **GitHub Models API** | Free LLM access via GITHUB_TOKEN — zero-config default |
 | **Pydantic** | Schema validation for LLM output. Production-grade structured output. |
@@ -207,7 +200,7 @@ gantt
     axisFormat %b %Y
 
     section Phase 1
-    Core Engine (rules + preprocessor + hybrid analyzer)    :p1, 2026-03-29, 21d
+    Core Engine (preprocessor + LLM analyzer)    :p1, 2026-03-29, 21d
 
     section Phase 2
     GitHub Action (Tier 1 — PR comments, Marketplace)       :p2, after p1, 14d
@@ -221,7 +214,7 @@ gantt
 
 | Phase | Deliverable | Career Signal |
 |---|---|---|
-| 1 — Core Engine | Rule engine + preprocessor + hybrid analyzer | **AI engineering: hybrid architecture, multi-provider LLM, structured prompting, Pydantic validation** |
+| 1 — Core Engine | Preprocessor + LLM analyzer | **AI engineering: multi-provider LLM, structured prompting, Pydantic validation, provider abstraction** |
 | 2 — GitHub Action | Tier 1 published, works on real repos, posts PR comments | GitHub Actions, Docker, CI/CD, product shipping |
 | 3 — Backend API | FastAPI + PostgreSQL + auth + pattern detection, deployed | **Backend engineering: API design, database, ORM, migrations, auth** |
 | 4 — Adoption | Real users, blog post, demo, marketplace traction | **Product ownership, real-world AI tool with users** |
@@ -232,10 +225,9 @@ gantt
 
 CIFI is done when:
 - A developer can add it to any repo in 3 lines and get CI failure analysis on the next failure
-- The rule engine catches common failures without any API key or LLM cost
-- Complex failures get accurate LLM analysis via free GitHub Models API (with Claude/OpenAI/Ollama as configurable alternatives)
+- Failures get accurate LLM analysis via free GitHub Models API (with Claude/OpenAI/Ollama as configurable alternatives)
 - All LLM output is validated against Pydantic schemas — no unstructured text
-- The hybrid analyzer demonstrates real AI engineering: provider abstraction, structured prompting, cost optimization, retry logic
+- The LLM analyzer demonstrates real AI engineering: provider abstraction, structured prompting, retry logic
 - A backend API is deployed with PostgreSQL persistence, API key auth, failure history, and pattern detection
 - At least 3 real repos are using CIFI with real failure analyses
 - You can demo it live in an interview and explain the AI architecture, prompt design, API design, and database schema
