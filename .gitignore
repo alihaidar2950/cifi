@@ -1,4 +1,10 @@
 .env
+.venv/
+cifi.egg-info/
+docs/RESUME.md
+__pycache__/
+*.pyc
+*.pyo
 .vscode/*
 !.vscode/extensions.json
 node_modules/
