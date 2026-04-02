@@ -1,0 +1,27 @@
+name: CI Failure Intelligence
+description: AI-powered CI failure analysis — posts structured root cause analysis as PR comments
+
+inputs:
+  github-token:
+    description: GitHub token for API access and GitHub Models LLM
+    required: true
+  log-file:
+    description: Path to CI log file
+    required: false
+    default: ""
+  model:
+    description: GitHub Models model to use
+    required: false
+    default: "openai/gpt-4o-mini"
+
+runs:
+  using: docker
+  image: action/Dockerfile
+  env:
+    INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+    INPUT_LOG_FILE: ${{ inputs.log-file }}
+    INPUT_MODEL: ${{ inputs.model }}
+
+branding:
+  icon: zap
+  color: purple

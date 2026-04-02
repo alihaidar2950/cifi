@@ -26,3 +26,9 @@ format:
 analyze-local:
 	@echo "Usage: python -m cifi <logfile> [workspace]"
 	@echo "Example: python -m cifi /tmp/ci-log.txt ."
+
+action-build:
+	docker build -t cifi-action -f action/Dockerfile .
+
+action-test: action-build
+	docker run --rm cifi-action python -c "import cifi; print('cifi import OK')"

@@ -24,9 +24,9 @@ def test_config_from_env(monkeypatch):
 
 
 def test_default_model():
-    assert Config().default_model == "gpt-4o-mini"
+    assert Config().default_model == "openai/gpt-4o-mini"
 
 
 def test_explicit_model_overrides_default():
-    config = Config(llm_provider="claude", llm_model="claude-opus-4-20250514")
-    assert config.default_model == "claude-opus-4-20250514"
+    config = Config(llm_model="openai/gpt-4o")
+    assert config.default_model == "openai/gpt-4o"
