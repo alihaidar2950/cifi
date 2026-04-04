@@ -6,7 +6,7 @@ inputs:
     description: GitHub token for API access and GitHub Models LLM
     required: true
   log-file:
-    description: Path to CI log file
+    description: Path to CI log file. If omitted, logs are fetched automatically via GitHub API.
     required: false
     default: ""
   model:
@@ -14,9 +14,17 @@ inputs:
     required: false
     default: "openai/gpt-4o-mini"
 
+outputs:
+  failure-type:
+    description: Classified failure type (test_failure, build_error, infra_error, config_error, timeout, unknown)
+  confidence:
+    description: Analysis confidence level (high, medium, low)
+  root-cause:
+    description: Root cause summary from LLM analysis
+
 runs:
   using: docker
-  image: action/Dockerfile
+  image: docker://ghcr.io/alihaidar2950/cifi:latest
   env:
     INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
     INPUT_LOG_FILE: ${{ inputs.log-file }}
