@@ -6,7 +6,10 @@ inputs:
     description: GitHub token for API access and GitHub Models LLM
     required: true
   log-file:
-    description: Path to CI log file. If omitted, logs are fetched automatically via GitHub API.
+    description: >
+      Path to a CI log file inside the workspace (relative, e.g. cifi-test.log) or an absolute
+      /github/workspace/… path. Write logs with: tee $GITHUB_WORKSPACE/cifi-test.log.
+      If omitted, logs are fetched via GitHub API (only reliable in a separate job).
     required: false
     default: ""
   model:

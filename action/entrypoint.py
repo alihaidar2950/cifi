@@ -126,11 +126,24 @@ async def run() -> None:
     run_id = int(run_id_str) if run_id_str.isdigit() else 0
 
     if log_file:
+        # Docker containers run with /github/workspace as workdir and only that
+        # directory is volume-mounted from the runner. If an absolute path outside
+        # the workspace was given (e.g. /tmp/…), try the basename under /github/workspace.
+        resolved = log_file
+        if not os.path.exists(resolved):
+            fallback = os.path.join("/github/workspace", os.path.basename(resolved))
+            if os.path.exists(fallback):
+                resolved = fallback
         try:
-            with open(log_file) as f:
+            with open(resolved) as f:
                 log_content = f.read()
         except OSError as exc:
-            print(f"Error reading log file {log_file!r}: {exc}", file=sys.stderr)
+            print(
+                f"Error reading log file {log_file!r}: {exc}\n"
+                "Tip: log files must be inside the workspace. Write the log to\n"
+                "$GITHUB_WORKSPACE/file.log and pass log-file: file.log (relative path).",
+                file=sys.stderr,
+            )
             sys.exit(1)
     elif run_id and repo and token:
         print("No log file provided — fetching run logs from GitHub API...")
