@@ -24,7 +24,7 @@ outputs:
 
 runs:
   using: docker
-  image: docker://ghcr.io/alihaidar2950/cifi:latest
+  image: docker://ghcr.io/alihaidar2950/cifi:v1
   env:
     INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
     INPUT_LOG_FILE: ${{ inputs.log-file }}
