@@ -19,14 +19,35 @@ When a CI step fails, CIFI:
 ## Quick Start
 
 ```yaml
-# Add to your workflow file
-- uses: alihaidar2950/cifi@v1
-  if: failure()
-  with:
-    github-token: ${{ secrets.GITHUB_TOKEN }}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      models: read        # required for GitHub Models API
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests
+        id: run-tests
+        run: pytest tests/ -v 2>&1 | tee $GITHUB_WORKSPACE/cifi-test.log; exit ${PIPESTATUS[0]}
+
+      - name: Analyze failure with CIFI
+        if: failure()
+        uses: alihaidar2950/cifi@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          log-file: cifi-test.log   # relative path inside workspace
 ```
 
-That's it. No API keys, no infrastructure, no configuration.
+> **Key detail:** CIFI runs in a Docker container. The `log-file` path must be inside the
+> workspace — write with `tee $GITHUB_WORKSPACE/filename.log` and pass the filename as a
+> relative path (e.g. `cifi-test.log`). The `models: read` permission is required for the
+> GitHub Models API to work with `GITHUB_TOKEN`.
+
+**See it in action:** [alihaidar2950/cifi-demo](https://github.com/alihaidar2950/cifi-demo) — a repo with an intentional off-by-one bug and a live CIFI integration.
 
 ---
 
@@ -156,8 +177,8 @@ gantt
     Adoption (real users, blog, demo, marketplace)         :p4, after p3, 14d
 ```
 
-- [ ] **Phase 1** — Core Engine: preprocessor + LLM analyzer + multi-provider LLM
-- [ ] **Phase 2** — GitHub Action: package as Action, PR comments, publish to Marketplace
+- [x] **Phase 1** — Core Engine: preprocessor + LLM analyzer + multi-provider LLM
+- [x] **Phase 2** — GitHub Action: package as Action, PR comments, publish to Marketplace
 - [ ] **Phase 3** — Backend API: FastAPI + PostgreSQL + auth + failure history + pattern detection
 - [ ] **Phase 4** — Adoption: real users, blog post, demo content, marketplace traction
 
