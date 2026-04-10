@@ -1,7 +1,5 @@
 """GitHub Models API provider — free LLM via GITHUB_TOKEN."""
 
-import os
-
 import httpx
 
 from cifi.config import Config
@@ -12,12 +10,17 @@ class GitHubModelsProvider:
 
     BASE_URL = "https://models.github.ai/inference"
     API_VERSION = "2026-03-10"
+    DEFAULT_MODEL = "openai/gpt-4o-mini"
 
     def __init__(self, config: Config) -> None:
-        self.model = config.default_model
-        api_key = config.llm_api_key or os.environ.get("GITHUB_TOKEN", "")
+        if not config.llm_api_key:
+            raise ValueError(
+                "GitHubModelsProvider requires an API key. "
+                "Set CIFI_LLM_API_KEY or GITHUB_TOKEN."
+            )
+        self.model = config.llm_model or self.DEFAULT_MODEL
         self._headers = {
-            "Authorization": f"Bearer {api_key}",
+            "Authorization": f"Bearer {config.llm_api_key}",
             "Content-Type": "application/json",
             "Accept": "application/vnd.github+json",
             "X-GitHub-Api-Version": self.API_VERSION,
