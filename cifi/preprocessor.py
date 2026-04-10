@@ -21,7 +21,6 @@ _ERROR_MARKERS = [
     "EXCEPTION",
     "Traceback (most recent call last)",
     "AssertionError",
-    "AssertionError",
     "TypeError",
     "ValueError",
     "KeyError",

@@ -142,13 +142,22 @@ class FailureContext:
     commit_sha: str
     failed_step_logs: str       # CI logs from failed step
     source_files: dict[str, str]  # relevant source code {path: content}
-    test_output: str | None     # pytest/JUnit output
     git_diff: str               # diff of triggering commit
     dependency_files: dict[str, str]  # package.json, requirements.txt, etc.
     pr_title: str | None
     pr_description: str | None
 
-def ingest_local(workspace: str, step_outputs: list[str]) -> FailureContext:
+def ingest_local(
+    workspace: str,
+    step_logs: str,
+    *,
+    run_id: int = 0,
+    repo: str = "",
+    branch: str = "",
+    commit_sha: str = "",
+    pr_title: str | None = None,
+    pr_description: str | None = None,
+) -> FailureContext:
     """Tier 1: Read everything from local filesystem."""
     ...
 ```
@@ -186,8 +195,7 @@ class ProcessedContext:
     source_context: dict[str, str]  # Relevant source files
     git_diff_summary: str      # Truncated diff
     dependency_info: str       # Relevant dependency context
-    metadata: dict             # repo, branch, commit, PR info
-    token_estimate: int        # Approximate token count
+    metadata: RunMetadata      # repo, branch, commit, PR info
 
 def preprocess(context: FailureContext, max_tokens: int = 8000) -> ProcessedContext:
     ...

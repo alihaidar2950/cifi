@@ -1,6 +1,8 @@
 """Tests for CIFI schemas."""
 
-from cifi.schemas import AnalysisResult, FailureContext, ProcessedContext
+import pytest
+
+from cifi.schemas import AnalysisResult, FailureContext, ProcessedContext, RunMetadata
 
 
 def test_failure_context_defaults():
@@ -52,8 +54,6 @@ def test_analysis_result_from_json():
 
 
 def test_analysis_result_rejects_invalid_type():
-    import pytest
-
     with pytest.raises(Exception):
         AnalysisResult(
             failure_type="invalid_type",
@@ -63,3 +63,26 @@ def test_analysis_result_rejects_invalid_type():
             suggested_fix="y",
             relevant_log_lines=["some line"],
         )
+
+
+def test_analysis_result_rejects_empty_relevant_log_lines():
+    """Field(min_length=1) on relevant_log_lines must reject empty list."""
+    with pytest.raises(Exception):
+        AnalysisResult(
+            failure_type="test_failure",
+            confidence="high",
+            root_cause="x",
+            contributing_factors=[],
+            suggested_fix="y",
+            relevant_log_lines=[],
+        )
+
+
+def test_run_metadata_defaults():
+    meta = RunMetadata()
+    assert meta.repo == ""
+    assert meta.branch == ""
+    assert meta.commit_sha == ""
+    assert meta.run_id == 0
+    assert meta.pr_title is None
+    assert meta.pr_description is None
