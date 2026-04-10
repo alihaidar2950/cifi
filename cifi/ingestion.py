@@ -97,12 +97,6 @@ def ingest_local(
     # Git diff
     git_diff = _git_diff(ws)
 
-    # Detect test output (look for pytest/JUnit markers)
-    test_output: str | None = None
-    test_markers = ["PASSED", "FAILED", "ERROR", "pytest", "test session starts"]
-    if any(marker in step_logs for marker in test_markers):
-        test_output = step_logs
-
     return FailureContext(
         run_id=run_id,
         repo=repo,
@@ -110,7 +104,6 @@ def ingest_local(
         commit_sha=commit_sha,
         failed_step_logs=step_logs,
         source_files=source_files,
-        test_output=test_output,
         git_diff=git_diff,
         dependency_files=dependency_files,
         pr_title=pr_title,

@@ -31,11 +31,11 @@ def build_prompt(context: ProcessedContext) -> str:
 
     # Metadata
     meta = context.metadata
-    parts.append(f"Repository: {meta.get('repo', 'unknown')}")
-    parts.append(f"Branch: {meta.get('branch', 'unknown')}")
-    parts.append(f"Commit: {meta.get('commit_sha', 'unknown')}")
-    if meta.get("pr_title"):
-        parts.append(f"PR: {meta['pr_title']}")
+    parts.append(f"Repository: {meta.repo or 'unknown'}")
+    parts.append(f"Branch: {meta.branch or 'unknown'}")
+    parts.append(f"Commit: {meta.commit_sha or 'unknown'}")
+    if meta.pr_title:
+        parts.append(f"PR: {meta.pr_title}")
     parts.append("")
 
     # Error region (highest priority)

@@ -42,7 +42,7 @@ def test_ingest_local_reads_workspace(tmp_path):
     assert ctx.failed_step_logs == logs
 
 
-def test_ingest_local_detects_test_output(tmp_path):
+def test_ingest_local_stores_failed_step_logs(tmp_path):
     logs = "FAILED tests/test_x.py::test_y - AssertionError"
     ctx = ingest_local(workspace=str(tmp_path), step_logs=logs)
-    assert ctx.test_output is not None
+    assert ctx.failed_step_logs == logs

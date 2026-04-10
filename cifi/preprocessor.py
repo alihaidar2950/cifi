@@ -2,7 +2,7 @@
 
 import re
 
-from cifi.schemas import FailureContext, ProcessedContext
+from cifi.schemas import FailureContext, ProcessedContext, RunMetadata
 
 # ANSI escape code pattern
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
@@ -118,9 +118,8 @@ def preprocess(context: FailureContext, max_tokens: int = 8000) -> ProcessedCont
       dependencies:   5%
     """
     cleaned_logs = _clean(context.failed_step_logs)
-    cleaned_test = _clean(context.test_output) if context.test_output else ""
 
-    combined = f"{cleaned_logs}\n{cleaned_test}".strip()
+    combined = cleaned_logs
 
     # Extract structured pieces
     error_region = _extract_error_region(combined)
@@ -161,18 +160,14 @@ def preprocess(context: FailureContext, max_tokens: int = 8000) -> ProcessedCont
         remaining -= len(snippet)
     dependency_info = "\n".join(dep_parts)
 
-    metadata = {
-        "repo": context.repo,
-        "branch": context.branch,
-        "commit_sha": context.commit_sha,
-        "run_id": context.run_id,
-        "pr_title": context.pr_title,
-        "pr_description": context.pr_description,
-    }
-
-    total_text = f"{error_region}{stack_trace or ''}{git_diff_summary}{dependency_info}"
-    for v in source_context.values():
-        total_text += v
+    metadata = RunMetadata(
+        repo=context.repo,
+        branch=context.branch,
+        commit_sha=context.commit_sha,
+        run_id=context.run_id,
+        pr_title=context.pr_title,
+        pr_description=context.pr_description,
+    )
 
     return ProcessedContext(
         error_region=error_region,
@@ -182,5 +177,4 @@ def preprocess(context: FailureContext, max_tokens: int = 8000) -> ProcessedCont
         git_diff_summary=git_diff_summary,
         dependency_info=dependency_info,
         metadata=metadata,
-        token_estimate=_estimate_tokens(total_text),
     )

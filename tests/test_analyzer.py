@@ -6,7 +6,7 @@ import pytest
 
 from cifi.analyzer import AnalysisError, analyze
 from cifi.config import Config
-from cifi.schemas import AnalysisResult, ProcessedContext
+from cifi.schemas import AnalysisResult, ProcessedContext, RunMetadata
 
 # -- Fixtures --
 
@@ -31,8 +31,7 @@ def _make_context() -> ProcessedContext:
         error_region="AssertionError: assert 'invalid' == 'valid'",
         stack_trace="Traceback...",
         test_failures=["FAILED tests/test_user.py::test_user_creation"],
-        metadata={"repo": "test/repo", "branch": "main", "commit_sha": "abc123"},
-        token_estimate=500,
+        metadata=RunMetadata(repo="test/repo", branch="main", commit_sha="abc123"),
     )
 
 

@@ -12,7 +12,6 @@ def test_failure_context_defaults():
         failed_step_logs="some log",
     )
     assert ctx.source_files == {}
-    assert ctx.test_output is None
     assert ctx.git_diff == ""
     assert ctx.dependency_files == {}
     assert ctx.pr_title is None
@@ -23,7 +22,6 @@ def test_processed_context_defaults():
     assert ctx.stack_trace is None
     assert ctx.test_failures == []
     assert ctx.source_context == {}
-    assert ctx.token_estimate == 0
 
 
 def test_analysis_result_valid():
@@ -63,5 +61,5 @@ def test_analysis_result_rejects_invalid_type():
             root_cause="x",
             contributing_factors=[],
             suggested_fix="y",
-            relevant_log_lines=[],
+            relevant_log_lines=["some line"],
         )

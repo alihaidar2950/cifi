@@ -83,12 +83,10 @@ def test_preprocess_full():
         commit_sha="abc123",
         failed_step_logs="ERROR: test failed\nFAILED tests/test_x.py::test_y",
         source_files={"src/app.py": "def main(): pass"},
-        test_output="FAILED tests/test_x.py::test_y - AssertionError",
         git_diff="diff --git a/src/app.py",
         dependency_files={"requirements.txt": "flask==3.0"},
     )
     processed = preprocess(ctx, max_tokens=8000)
     assert processed.error_region
-    assert processed.metadata["repo"] == "owner/repo"
-    assert processed.token_estimate > 0
+    assert processed.metadata.repo == "owner/repo"
     assert "src/app.py" in processed.source_context

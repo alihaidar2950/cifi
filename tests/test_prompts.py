@@ -1,7 +1,7 @@
 """Tests for CIFI prompt builder."""
 
 from cifi.prompts import SYSTEM_PROMPT, build_prompt
-from cifi.schemas import ProcessedContext
+from cifi.schemas import ProcessedContext, RunMetadata
 
 
 def test_system_prompt_contains_schema():
@@ -13,7 +13,7 @@ def test_system_prompt_contains_schema():
 def test_build_prompt_includes_error_region():
     ctx = ProcessedContext(
         error_region="FATAL: connection refused",
-        metadata={"repo": "test/repo", "branch": "main", "commit_sha": "abc"},
+        metadata=RunMetadata(repo="test/repo", branch="main", commit_sha="abc"),
     )
     prompt = build_prompt(ctx)
     assert "FATAL: connection refused" in prompt
@@ -28,7 +28,7 @@ def test_build_prompt_includes_optional_sections():
         source_context={"app.py": "def main(): pass"},
         git_diff_summary="diff --git",
         dependency_info="flask==3.0",
-        metadata={"repo": "r", "branch": "b", "commit_sha": "c"},
+        metadata=RunMetadata(repo="r", branch="b", commit_sha="c"),
     )
     prompt = build_prompt(ctx)
     assert "## Stack Trace" in prompt
@@ -41,7 +41,7 @@ def test_build_prompt_includes_optional_sections():
 def test_build_prompt_skips_empty_sections():
     ctx = ProcessedContext(
         error_region="error",
-        metadata={"repo": "r", "branch": "b", "commit_sha": "c"},
+        metadata=RunMetadata(repo="r", branch="b", commit_sha="c"),
     )
     prompt = build_prompt(ctx)
     assert "## Stack Trace" not in prompt

@@ -94,7 +94,6 @@ async def test_analyze_pytest_failure(config):
         branch="feature/user-validation",
         commit_sha="abc1234",
         failed_step_logs=PYTEST_FAILURE_LOG,
-        test_output=PYTEST_FAILURE_LOG,
     )
     processed = preprocess(context)
     result = await analyze(processed, config)
