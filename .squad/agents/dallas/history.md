@@ -13,3 +13,4 @@ CIFI (CI Failure Intelligence) — AI-powered CI failure analysis agent.
 ## Learnings
 
 - [2026-04-11] Cleaned up preprocessor.py: deduplicated _ERROR_MARKERS, removed vestigial combined variable
+- [2026-04-11] Reviewed and updated DATA_FLOW, LLM_INTEGRATION docs for Phase 1 accuracy

@@ -14,7 +14,7 @@ CIFI has properties that make it an ideal Squad candidate:
 
 | CIFI Property | Squad Benefit |
 |---|---|
-| **6 phases** spanning months of work | Agents accumulate project memory across sessions; no re-explaining decisions |
+| **4 phases** spanning months of work | Agents accumulate project memory across sessions; no re-explaining decisions |
 | **Multi-domain** (Python engine, GitHub Actions, FastAPI, React, K8s, Terraform) | Each agent specializes in one domain — avoids context pollution |
 | **Two-tier architecture** with shared core | Routing rules ensure the right agent handles tier-specific vs shared code |
 | **Solo developer** building a complex system | Squad acts as a persistent team — reviewer, tester, infra engineer |
@@ -54,14 +54,14 @@ CIFI has properties that make it an ideal Squad candidate:
 - **Expertise**: React, TypeScript, Tailwind, charting libraries, API consumption.
 - **Reads**: `frontend/`
 - **Handles**: Dashboard components, failure visualization, filtering, trend charts.
-- **Active from**: Phase 4+
+- **Active from**: Deferred — Phase 4+ if needed (React dashboard is not in the 4-phase plan)
 
 ### 6. **Ops** — Infrastructure (`k8s/`, `terraform/`)
 - **Role**: Platform engineer. Owns deployment, infrastructure, and CI/CD pipelines.
 - **Expertise**: Kubernetes, Kustomize, Terraform, AWS EKS, Helm, GitHub Actions CI.
 - **Reads**: `k8s/`, `terraform/`, `.github/workflows/`
 - **Handles**: K8s manifests, Terraform modules, CI pipeline, container builds, secrets management.
-- **Active from**: Phase 5+
+- **Active from**: Deferred — after Phase 4 if needed (EKS/Terraform/Kustomize are out of scope for Phases 1–4)
 
 ### 7. **Tester** — Quality Assurance
 - **Role**: Test engineer. Owns test strategy and test fixtures across all components.
@@ -77,12 +77,12 @@ Not every agent is needed from day one. Squad supports a growing team:
 
 | Phase | Active Agents | Why |
 |---|---|---|
-| **Phase 1** — Core Engine | Lead, Engine, Tester | Focus on `cifi/` package: rules, preprocessor, analyzer |
+| **Phase 1** — Core Engine | Lead, Engine, Tester | Focus on `cifi/` package: preprocessor, LLM analyzer, schemas |
 | **Phase 2** — GitHub Action | + Action | Package engine as container action, PR comment formatting |
-| **Phase 3** — Central API | + Backend | FastAPI server, PostgreSQL, pattern detection |
-| **Phase 4** — Dashboard + CLI | + Frontend | React dashboard, CLI tool |
-| **Phase 5** — Infrastructure | + Ops | EKS deployment, Terraform, Kustomize |
-| **Phase 6** — Polish & Launch | All | Cross-cutting polish, docs, marketplace listing |
+| **Phase 3** — Backend API | + Backend | FastAPI server, PostgreSQL, pattern detection |
+| **Phase 4** — Adoption + Growth | All active | Real users, blog post, marketplace traction |
+| **Deferred** — Infrastructure | + Ops | EKS, Terraform, Kustomize — after Phase 4 if needed |
+| **Deferred** — Dashboard | + Frontend | React dashboard — after Phase 4 if needed |
 
 Squad makes it easy to add agents later — just create a new charter. Agents you don't need yet don't create noise.
 
@@ -99,7 +99,7 @@ npm install -g @bradygaster/squad-cli
 ### 2. Initialize Squad in CIFI repo
 
 ```bash
-cd /home/ali/repos/autonomous-devex-platform
+cd /home/ali/repos/cifi
 squad init
 ```
 

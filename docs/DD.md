@@ -73,49 +73,55 @@ flowchart TB
 
 #### Interface — `action.yml`
 ```yaml
-name: 'CIFI — CI Failure Intelligence'
-description: 'AI-powered CI failure analysis. Get root cause + fix suggestions on every failure.'
+name: 'CI Failure Intelligence'
+description: 'AI-powered CI failure analysis — posts structured root cause analysis as PR comments'
 inputs:
   github-token:
-    description: 'GitHub token for API access and PR comments'
+    description: 'GitHub token for API access and GitHub Models LLM'
     required: true
-    default: ${{ github.token }}
-  llm-provider:
-    description: 'LLM provider: github-models, claude, openai, ollama'
+  log-file:
+    description: 'Path to a CI log file inside the workspace (relative path)'
     required: false
-    default: 'github-models'
-  llm-api-key:
-    description: 'API key for LLM provider (not needed for github-models)'
+    default: ''
+  model:
+    description: 'GitHub Models model to use'
     required: false
+    default: 'openai/gpt-4o-mini'
 runs:
-  using: 'docker'
-  image: 'Dockerfile'
+  using: docker
+  image: docker://ghcr.io/alihaidar2950/cifi:v1
 ```
 
 #### Entry Point Logic
 ```python
-async def main():
-    # 1. Read environment
-    context = read_github_context()  # repo, run_id, pr_number, etc.
+async def run() -> None:
+    # 1. Read environment variables
+    token = os.environ.get("INPUT_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
+    repo = os.environ.get("GITHUB_REPOSITORY", "")
+    workspace = os.environ.get("GITHUB_WORKSPACE", ".")
+    model = os.environ.get("INPUT_MODEL", "openai/gpt-4o-mini")
 
-    # 2. Ingest failure data
+    # 2. Read log content — from log-file input or GitHub Actions API
+    log_content = read_log_file(log_file) or await fetch_run_logs(token, repo, run_id)
+
+    # 3. Ingest failure data
     failure_context = ingest_local(
-        workspace=os.environ["GITHUB_WORKSPACE"],
-        step_outputs=read_step_outputs(),
+        workspace=workspace,
+        step_logs=log_content,
+        repo=repo, branch=branch, commit_sha=commit_sha,
     )
 
-    # 3. Preprocess
+    # 4. Preprocess
     processed = preprocess(failure_context, max_tokens=8000)
 
-    # 4. LLM analysis
-    result = await analyze(processed)  # multi-provider LLM analysis
+    # 5. LLM analysis (GitHub Models provider; retry with exponential backoff)
+    result = await analyze(processed, config)
 
-    # 5. Post PR comment
-    post_pr_comment(context.pr_number, format_comment(result))
+    # 6. Post PR comment — idempotent (PATCHes existing CIFI comment if found)
+    post_comment(token, repo, pr_number, format_comment(result, model))
 
-    # 6. Optional: send to API
-    if api_url:
-        post_to_api(api_url, result)
+    # 7. Write structured outputs to $GITHUB_OUTPUT
+    write_outputs(result)
 ```
 
 ---
@@ -220,19 +226,19 @@ The quality of analysis output is directly proportional to the quality of input.
 
 #### Interface
 ```python
-class AnalysisResult(BaseModel):
-    failure_type: Literal["test_failure", "build_error", "infra_error", "config_error", "timeout", "unknown"]
-    confidence: Literal["high", "medium", "low"]
-    root_cause: str                    # One sentence summary
-    contributing_factors: list[str]
-    suggested_fix: str                 # Specific actionable suggestion
-    relevant_log_lines: list[str]
-
-async def analyze(context: ProcessedContext) -> AnalysisResult:
-    """Analyze failure using multi-provider LLM."""
+async def analyze(
+    context: ProcessedContext,
+    config: Config | None = None,
+) -> AnalysisResult:
+    """Analyze failure using multi-provider LLM.
+    Retries with exponential backoff on validation errors or transient failures.
+    """
+    config = config or Config.from_env()
+    provider = create_provider(config)
     prompt = build_prompt(context)
-    response = await llm_provider.analyze(prompt)
-    return AnalysisResult.model_validate_json(response)
+    # ... retry loop with backoff ...
+    result = AnalysisResult.model_validate_json(raw_response)
+    return result
 ```
 
 #### Multi-Provider LLM Architecture
@@ -244,23 +250,27 @@ classDiagram
         +analyze(prompt: str) str
     }
     class GitHubModelsProvider {
-        +base_url: str
+        +BASE_URL: str
+        +DEFAULT_MODEL: str
         +analyze(prompt: str) str
     }
     class ClaudeProvider {
+        <<planned Phase 2>>
         +analyze(prompt: str) str
     }
     class OpenAIProvider {
+        <<planned Phase 2>>
         +analyze(prompt: str) str
     }
     class OllamaProvider {
+        <<planned Phase 2>>
         +analyze(prompt: str) str
     }
 
     LLMProvider <|.. GitHubModelsProvider : implements
-    LLMProvider <|.. ClaudeProvider : implements
-    LLMProvider <|.. OpenAIProvider : implements
-    LLMProvider <|.. OllamaProvider : implements
+    LLMProvider <|.. ClaudeProvider : planned
+    LLMProvider <|.. OpenAIProvider : planned
+    LLMProvider <|.. OllamaProvider : planned
 
     class Analyzer {
         +llm_provider: LLMProvider
@@ -276,36 +286,40 @@ class LLMProvider(Protocol):
     async def analyze(self, prompt: str) -> str: ...
 
 class GitHubModelsProvider(LLMProvider):
-    """Free LLM via GitHub Models API. Uses GITHUB_TOKEN. Zero config."""
-    base_url = "https://models.inference.ai.azure.com"
+    """Free LLM via GitHub Models API. Uses GITHUB_TOKEN. Implemented."""
+    BASE_URL = "https://models.github.ai/inference"
+    DEFAULT_MODEL = "openai/gpt-4o-mini"
 
-class ClaudeProvider(LLMProvider):
-    """Anthropic Claude API. Higher quality analysis."""
-
-class OpenAIProvider(LLMProvider):
-    """OpenAI-compatible API. Supports any OpenAI-compatible endpoint."""
-
-class OllamaProvider(LLMProvider):
-    """Local Ollama instance. No data leaves the machine. Privacy-first."""
+# Planned — Phase 2 (not yet implemented):
+# class ClaudeProvider(LLMProvider): ...
+# class OpenAIProvider(LLMProvider): ...
+# class OllamaProvider(LLMProvider): ...
 ```
 
 This protocol-based design is a key AI engineering pattern: it decouples the analysis logic from the LLM vendor, making the system extensible and testable.
 
 #### Prompt Engineering
 ```python
-# System prompt — defines role, output format, domain expertise
-SYSTEM_PROMPT = """You are a CI failure analyst. Given pipeline logs, source code context,
+# System prompt — defines role, output format (JSON schema hardcoded, no template vars)
+SYSTEM_PROMPT = """\
+You are a CI failure analyst. Given pipeline logs, source code context,
 a git diff, and test output, identify the root cause of the failure and suggest a fix.
 
-Always respond in valid JSON matching this schema:
-{schema}
+You MUST respond with valid JSON and nothing else. Use exactly this format:
+
+{
+  "failure_type": "<test_failure|build_error|infra_error|config_error|timeout|unknown>",
+  "confidence": "<high|medium|low>",
+  "root_cause": "One sentence describing the root cause",
+  "contributing_factors": ["factor 1", "factor 2"],
+  "suggested_fix": "Specific actionable fix suggestion",
+  "relevant_log_lines": ["relevant line from the logs"]
+}
 
 Rules:
-- Be specific about the root cause — reference exact files and line numbers
-- The suggested fix should be actionable, not generic advice
-- Include the most relevant log lines that support your analysis
-- Set confidence to "low" if you're uncertain
-"""
+- Be specific — reference exact files and line numbers when possible
+- Set confidence to "low" if logs are unclear or ambiguous
+- Do NOT wrap the JSON in markdown code fences — return raw JSON only"""
 
 # Context window management — intelligent truncation
 def build_prompt(context: ProcessedContext, max_tokens: int = 8000) -> str:
@@ -319,27 +333,35 @@ def build_prompt(context: ProcessedContext, max_tokens: int = 8000) -> str:
 ### 5. Output Router (Tier 1)
 
 #### Tech
-- Python module: `cifi/output.py`
+- `action/entrypoint.py` — output handling lives in the Action entry point (no separate module)
 - GitHub REST API for PR comments
 
 #### PR Comment Format
 ```markdown
-## 🔍 CIFI — CI Failure Analysis
+## 🤖 CIFI — CI Failure Analysis
 
-**Failure Type**: `test_failure` | **Confidence**: `high`
+**Failure Type:** `test_failure` | **Confidence:** `high`
 
-**Root Cause**: The `test_user_creation` test fails because the email
-validation regex was updated but the test fixture still uses an old format.
+### Root Cause
+The `test_user_creation` test fails because the email validation regex was
+updated but the test fixture still uses an old format.
 
-**Suggested Fix**: Update the test fixture email in `tests/conftest.py` line 42
-to use a valid email format matching the new regex.
+### Contributing Factors
+- Email regex updated in `validators.py` but tests not updated
+- No test for the new regex pattern
 
-**Relevant Log Lines**:
-> AssertionError: assert 'invalid' == 'valid'
-> tests/test_users.py::test_user_creation FAILED
+### Suggested Fix
+Update the test fixture email in `tests/conftest.py` line 42 to use a valid
+email format matching the new regex.
+
+### Relevant Log Lines
+```
+AssertionError: assert 'invalid' == 'valid'
+tests/test_users.py::test_user_creation FAILED
+```
 
 ---
-<sub>Analyzed by [CIFI](https://github.com/alihaidar2950/cifi)</sub>
+*Analyzed by [CIFI](https://github.com/alihaidar2950/cifi) using GitHub Models (openai/gpt-4o-mini)*
 ```
 
 ---
@@ -593,9 +615,9 @@ If targeting platform/infra roles specifically:
 ### Tier 1 (GitHub Action Inputs)
 | Input | Purpose | Default |
 |---|---|---|
-| `github-token` | GitHub API access + PR comments | `${{ github.token }}` |
-| `llm-provider` | LLM backend: `github-models`, `claude`, `openai`, `ollama` | `github-models` |
-| `llm-api-key` | API key for paid LLM providers | (optional) |
+| `github-token` | GitHub API access + GitHub Models LLM | (required) |
+| `log-file` | Path to a CI log file inside the workspace | `""` (fetches via API if omitted) |
+| `model` | GitHub Models model to use | `openai/gpt-4o-mini` |
 
 ### Tier 2 API (Environment Variables)
 | Variable | Purpose | Default |

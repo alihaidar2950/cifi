@@ -34,11 +34,9 @@ flowchart TB
             end
 
             analyzer --> comment["PR Comment\n(GitHub API)"]
-            analyzer -->|optional| api_post["POST to API"]
         end
     end
 
-    api_post -.->|optional| tier2
 
     subgraph tier2["Tier 2 — Backend API (Docker + managed platform)"]
         direction TB
@@ -63,13 +61,12 @@ Runs as a step in the target repo's GitHub Actions workflow. When a preceding st
 The critical insight: a webhook-based server can only access what the GitHub API exposes — logs, diffs, and PR metadata. It cannot see the full source code, dependency files, test fixtures, or configuration that often hold the real root cause. By running inside the CI pipeline, CIFI has the full checkout at its disposal.
 
 ### How It Works
-1. The Action reads CI logs from `$GITHUB_STEP_SUMMARY` or step output files
+1. The Action reads CI logs from the `log-file` input (a workspace-relative file path) or fetches failed job logs via the GitHub Actions API
 2. Log ingestion reads source code directly from the workspace (`$GITHUB_WORKSPACE`)
 3. Preprocessor strips noise, extracts error regions, builds structured context
 4. Multi-provider LLM analyzes the preprocessed context with structured prompting
 5. LLM response validated against Pydantic schema — malformed responses retried
-6. Posts structured analysis as a PR comment via GitHub API
-7. Optionally sends results to Tier 2 API
+6. Posts structured analysis as a PR comment via GitHub API (idempotent — PATCHes an existing CIFI comment if present)
 
 ### Usage (3 lines in a workflow)
 ```yaml
@@ -125,10 +122,10 @@ This is the heart of CIFI and the primary AI engineering showcase. The multi-pro
 ### Multi-Provider LLM Integration
 CIFI sends preprocessed context to an LLM via a provider-agnostic architecture:
 
-- **GitHub Models API** — Free via `GITHUB_TOKEN` (available in Actions by default)
-- **Claude API** — Higher quality, pay-per-use
-- **OpenAI-compatible** — Any OpenAI-compatible endpoint
-- **Ollama** — Self-hosted, for teams that can't send logs externally
+- **GitHub Models API** — Free via `GITHUB_TOKEN`. The sole implemented provider in Phase 1.
+- **Claude API** — Higher quality, pay-per-use. *(Planned — Phase 2)*
+- **OpenAI-compatible** — Any OpenAI-compatible endpoint. *(Planned — Phase 2)*
+- **Ollama** — Self-hosted, for teams that can't send logs externally. *(Planned — Phase 2)*
 
 Each provider implements a shared Python protocol, making the system extensible. Adding a new LLM provider requires implementing a single method.
 

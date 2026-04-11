@@ -35,6 +35,37 @@
 
 ---
 
+### 2026-04-11: Documentation accuracy review — architecture docs
+**By:** Ripley (Lead)
+**What:** Reviewed and corrected HLD.md, DD.md, PLAN.md, NORTH_STAR.md
+**Key corrections:**
+- HLD.md: Fixed log source (not `$GITHUB_STEP_SUMMARY`), removed unimplemented api_post node, marked Claude/OpenAI/Ollama as Phase 2
+- DD.md: Fixed action.yml inputs, Docker image reference, entrypoint pseudocode, provider BASE_URL, unimplemented provider status, SYSTEM_PROMPT template, output router reference, PR comment format, Tier 1 config table
+- PLAN.md: Corrected provider implementation status, collapsed unimplemented providers in project structure diagram, removed "few-shot examples" from prompts.py description
+- NORTH_STAR.md: Split multi-provider LLM success criteria into Phase 1 (GitHub Models) vs Phase 2 (Claude, OpenAI, Ollama)
+- ARCHITECTURE.md: Reviewed — already accurate, no changes needed
+
+---
+
+### 2026-04-11: Documentation accuracy review — pipeline docs
+**By:** Dallas (Core Dev)
+**What:** Reviewed and corrected DATA_FLOW.md, LLM_INTEGRATION.md
+**Key corrections:**
+- DATA_FLOW.md: Fixed build_prompt() placement in sequence diagram (called inside analyze(), not directly from entrypoint); fixed preprocess() call signature (no explicit max_tokens arg)
+- LLM_INTEGRATION.md: Renamed "Provider Selection Flow" → "analyze() — Call Flow"; added missing build_prompt(context) step before provider.analyze(prompt)
+
+---
+
+### 2026-04-11: Documentation accuracy review — DevOps and meta docs
+**By:** Parker (DevOps)
+**What:** Reviewed and corrected GITHUB_ACTION.md, RESUME.md, SQUAD_ADOPTION_PLAN.md
+**Key corrections:**
+- GITHUB_ACTION.md: Fixed ingest node params in execution flow diagram; added missing env: block to action.yml listing
+- RESUME.md: Added CIFI project entry (was missing entirely)
+- SQUAD_ADOPTION_PLAN.md: Fixed repo path (cifi), phase count (4 not 6), phase table labels, added Deferred rows for Infrastructure and Dashboard agents
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus

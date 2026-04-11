@@ -44,7 +44,7 @@ classDiagram
 
 ---
 
-## Provider Selection Flow
+## analyze() — Call Flow
 
 ```mermaid
 flowchart TD
@@ -55,7 +55,8 @@ flowchart TD
     match -->|"github-models"| gh["GitHubModelsProvider(config)\nFree via GITHUB_TOKEN"]
     match -->|"other"| err["ValueError: Unknown provider"]
 
-    gh --> call["provider.analyze(prompt)\nasync — returns raw str"]
+    gh --> prompt_build["build_prompt(context)\nAssemble prompt from ProcessedContext"]
+    prompt_build --> call["provider.analyze(prompt)\nasync — returns raw str"]
     call --> strip["Strip markdown fences\nif LLM wrapped JSON in backticks"]
     strip --> validate["AnalysisResult.model_validate_json(cleaned)\nPydantic validates schema"]
 

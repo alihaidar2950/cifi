@@ -36,7 +36,7 @@ Phases 1-2 prove you can design AI-powered tools. Phase 3 proves you can build a
 2. `cifi/preprocessor.py` — Intelligent log preprocessing: strip ANSI codes/timestamps, detect error boundaries, extract stack traces and assertion failures, truncate intelligently to fit LLM context window. This is where the real engineering lives — quality of analysis depends on quality of preprocessing.
 3. `cifi/analyzer.py` — LLM analyzer: provider-agnostic LLM integration supporting GitHub Models API, Claude, OpenAI, and Ollama via a shared protocol. Structured prompting with JSON enforcement and Pydantic validation.
 4. `cifi/schemas.py` — Pydantic models: `AnalysisResult` (failure_type, confidence, root_cause, contributing_factors, suggested_fix, relevant_log_lines). Force structured JSON output from LLM — always validate against schema
-5. `cifi/llm/` — Multi-provider LLM integration: `base.py` (provider protocol), `github_models.py`, `claude.py`, `openai_provider.py`, `ollama.py`. Each provider handles auth, request formatting, response parsing, and retries
+5. `cifi/llm/` — Multi-provider LLM integration: `base.py` (provider protocol + factory), `github_models.py` (GitHub Models REST client — free via `GITHUB_TOKEN`). Other providers (`claude.py`, `openai_provider.py`, `ollama.py`) are planned for Phase 2.
 6. `cifi/prompts.py` — Prompt engineering: system prompt design, context window management, few-shot examples for edge cases, output format enforcement
 7. `cifi/config.py` — Configuration: LLM provider, model, API keys via env vars
 8. `cifi/ingestion.py` — Log ingestion: read CI logs and source code from local filesystem
@@ -235,12 +235,9 @@ flowchart TB
         schemas["schemas.py\nPydantic models"]
         prompts["prompts.py\nPrompt engineering"]
         subgraph llm["llm/"]
-            base["base.py (Protocol)"]
-            claude["claude.py"]
-            openai_p["openai.py"]
+            base["base.py (Protocol + Factory)"]
             ghmodels["github_models.py"]
-            ollama["ollama.py"]
-        end
+            future["claude.py · openai.py · ollama.py\n(planned Phase 2)"]        end
     end
 
     subgraph action_dir["action/ — GitHub Action"]
@@ -269,7 +266,7 @@ flowchart TB
 ```
 cifi/               # Core engine: preprocessor, analyzer, schemas
   llm/              # Multi-provider LLM integration (claude, openai, github-models, ollama)
-  prompts.py        # Prompt engineering: system prompts, few-shot examples
+  prompts.py        # Prompt engineering: system prompt, context formatting, JSON enforcement
   preprocessor.py   # Log preprocessing and context extraction
   analyzer.py       # LLM analyzer: multi-provider, structured prompting
   schemas.py        # Pydantic models for structured output

@@ -64,7 +64,7 @@ sequenceDiagram
     Ingest->>Ingest: Detect test output markers
     Ingest-->>EP: FailureContext
 
-    EP->>Pre: preprocess(context, max_tokens=8000)
+    EP->>Pre: preprocess(ctx)
     Pre->>Pre: Strip ANSI escape codes
     Pre->>Pre: Strip timestamps
     Pre->>Pre: Extract error region (plus/minus 5/10 lines around markers)
@@ -74,13 +74,12 @@ sequenceDiagram
     Pre->>Pre: Truncate each section to its budget
     Pre-->>EP: ProcessedContext
 
-    EP->>Prompt: build_prompt(processed_context)
+    EP->>Anlz: analyze(processed, config)
+    Anlz->>Prompt: build_prompt(context)
     Prompt->>Prompt: Prepend SYSTEM_PROMPT with JSON schema enforcement
     Prompt->>Prompt: Append metadata, error region, stack trace, test failures
     Prompt->>Prompt: Append source code, git diff, dependency info
-    Prompt-->>EP: Full prompt string
-
-    EP->>Anlz: analyze(processed_context, config)
+    Prompt-->>Anlz: Full prompt string
 
     loop Retry loop (up to max_retries, default 3)
         Anlz->>LLM: POST /chat/completions (model, messages, temp=0.2, json_object mode)
