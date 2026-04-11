@@ -11,4 +11,4 @@ CIFI (CI Failure Intelligence) — AI-powered CI failure analysis agent.
 
 ## Learnings
 
-(none yet)
+[2026-04-11] Added 8 tests to test_preprocessor.py — comprehensive coverage of edge cases and token budget behavior

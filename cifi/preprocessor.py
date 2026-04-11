@@ -8,31 +8,25 @@ from cifi.schemas import FailureContext, ProcessedContext, RunMetadata
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
 # Timestamp patterns (ISO, syslog-style, GitHub Actions)
 _TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[^\s]*\s*", re.MULTILINE)
-# Common error boundary markers
+# Common error boundary markers — all lowercase; matching uses .lower() on each line
 _ERROR_MARKERS = [
     "error",
-    "Error",
-    "ERROR",
-    "FAILED",
-    "FAIL",
     "failed",
+    "fail",
     "exception",
-    "Exception",
-    "EXCEPTION",
-    "Traceback (most recent call last)",
-    "AssertionError",
-    "TypeError",
-    "ValueError",
-    "KeyError",
-    "AttributeError",
-    "ModuleNotFoundError",
-    "ImportError",
-    "SyntaxError",
-    "IndentationError",
-    "FATAL",
+    "traceback (most recent call last)",
+    "assertionerror",
+    "typeerror",
+    "valueerror",
+    "keyerror",
+    "attributeerror",
+    "modulenotfounderror",
+    "importerror",
+    "syntaxerror",
+    "indentationerror",
     "fatal",
     "panic",
-    "npm ERR!",
+    "npm err!",
     "cargo error",
 ]
 
@@ -118,12 +112,10 @@ def preprocess(context: FailureContext, max_tokens: int = 8000) -> ProcessedCont
     """
     cleaned_logs = _clean(context.failed_step_logs)
 
-    combined = cleaned_logs
-
     # Extract structured pieces
-    error_region = _extract_error_region(combined)
-    stack_trace = _extract_stack_trace(combined)
-    test_failures = _extract_test_failures(combined)
+    error_region = _extract_error_region(cleaned_logs)
+    stack_trace = _extract_stack_trace(cleaned_logs)
+    test_failures = _extract_test_failures(cleaned_logs)
 
     # Budget allocation
     error_budget = int(max_tokens * 0.40)
