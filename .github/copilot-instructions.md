@@ -37,3 +37,4 @@ Phase 1 — Core Engine (multi-provider LLM analysis + structured prompting)
 - Test every phase before advancing to the next
 - Simple deployment: Docker + managed platform. No infrastructure rabbit holes.
 - When user requests push or PR actions, follow `.github/instrctions/pr-instructions.md`
+- **After making any local source code change**, always pause and ask the user: *"I've made changes to [files]. Would you like me to push these to GitHub?"* — then follow `.github/instrctions/pr-instructions.md` if the user agrees.
