@@ -9,7 +9,6 @@ from cifi.schemas import FailureContext
 # Files to read as dependency manifests
 _DEPENDENCY_FILES = [
     "package.json",
-    "package-lock.json",
     "requirements.txt",
     "pyproject.toml",
     "Pipfile",
@@ -23,33 +22,37 @@ _DEPENDENCY_FILES = [
 # Max bytes to read per source file
 _MAX_FILE_SIZE = 50_000
 
+# Compiled at module level — avoid re-compiling on every call
+_PATH_PATTERNS = [
+    re.compile(r'File "([^"]+)"'),
+    re.compile(r"(\S+\.\w{1,5}):(\d+)"),
+]
+
 
 def _read_file_safe(path: Path, max_bytes: int = _MAX_FILE_SIZE) -> str | None:
-    """Read a file, returning None if it doesn't exist or isn't text."""
+    """Read a file, returning None if it doesn't exist or can't be read."""
     try:
         content = path.read_text(errors="replace")
         return content[:max_bytes]
-    except (OSError, UnicodeDecodeError):
+    except OSError:
         return None
 
 
 def _extract_file_paths(logs: str) -> list[str]:
     """Extract file paths mentioned in error logs."""
-    # Match patterns like: path/to/file.py:42: or File "path/to/file.py"
-    patterns = [
-        re.compile(r'File "([^"]+)"'),
-        re.compile(r"(\S+\.\w{1,5}):(\d+)"),
-        re.compile(r"in\s+(\S+\.\w{1,5})"),
-    ]
     paths: list[str] = []
-    for pattern in patterns:
+    for pattern in _PATH_PATTERNS:
         for match in pattern.finditer(logs):
             paths.append(match.group(1))
     return list(dict.fromkeys(paths))  # dedupe, preserve order
 
 
 def _git_diff(workspace: Path) -> str:
-    """Get git diff of the most recent commit."""
+    """Get git diff of the most recent commit.
+
+    Falls back to ``git show --stat HEAD`` on shallow clones (fetch-depth: 1),
+    where ``HEAD~1`` is unavailable.
+    """
     try:
         result = subprocess.run(
             ["git", "diff", "HEAD~1"],
@@ -58,7 +61,17 @@ def _git_diff(workspace: Path) -> str:
             text=True,
             timeout=10,
         )
-        return result.stdout[:_MAX_FILE_SIZE] if result.returncode == 0 else ""
+        if result.returncode == 0:
+            return result.stdout[:_MAX_FILE_SIZE]
+        # Shallow clone fallback — provides at least the commit summary
+        fallback = subprocess.run(
+            ["git", "show", "--stat", "HEAD"],
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return fallback.stdout[:_MAX_FILE_SIZE] if fallback.returncode == 0 else ""
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return ""
 
@@ -75,12 +88,16 @@ def ingest_local(
     pr_description: str | None = None,
 ) -> FailureContext:
     """Tier 1: Read failure context from the local filesystem."""
-    ws = Path(workspace)
+    ws = Path(workspace).resolve()
 
-    # Read source files mentioned in error logs
+    # Read source files mentioned in error logs — guard against path traversal
     source_files: dict[str, str] = {}
     for file_path in _extract_file_paths(step_logs):
         full_path = ws / file_path
+        try:
+            full_path.resolve().relative_to(ws)
+        except ValueError:
+            continue  # path escapes workspace — skip
         if full_path.is_file():
             content = _read_file_safe(full_path)
             if content:

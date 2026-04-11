@@ -9,6 +9,7 @@ Apply these steps when the user says any of the following:
 - make a PR
 - open a pull request
 - commit and push
+- yes (in response to the agent asking "Would you like me to push these to GitHub?")
 
 ## Default Safety Rules
 
