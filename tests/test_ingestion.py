@@ -46,3 +46,21 @@ def test_ingest_local_stores_failed_step_logs(tmp_path):
     logs = "FAILED tests/test_x.py::test_y - AssertionError"
     ctx = ingest_local(workspace=str(tmp_path), step_logs=logs)
     assert ctx.failed_step_logs == logs
+
+
+def test_ingest_local_blocks_path_traversal(tmp_path):
+    """Files outside workspace referenced via .. must not be read."""
+    # Place a sentinel file one level above the workspace
+    secret = tmp_path.parent / "secret.txt"
+    secret.write_text("credentials")
+
+    logs = f'File "../../{secret.name}"'
+    ctx = ingest_local(workspace=str(tmp_path), step_logs=logs)
+    assert not ctx.source_files  # traversal attempt must be silently dropped
+
+
+def test_ingest_local_package_lock_not_collected(tmp_path):
+    """package-lock.json should not be ingested (noisy truncated lockfile)."""
+    (tmp_path / "package-lock.json").write_text('{"lockfileVersion": 3}')
+    ctx = ingest_local(workspace=str(tmp_path), step_logs="")
+    assert "package-lock.json" not in ctx.dependency_files
