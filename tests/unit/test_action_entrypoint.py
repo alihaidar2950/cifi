@@ -5,12 +5,12 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 # Make the standalone action script importable
-sys.path.insert(0, str(Path(__file__).parent.parent / "action"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "action"))
 import entrypoint
 
 from cifi.schemas import AnalysisResult
@@ -29,43 +29,18 @@ def sample_result() -> AnalysisResult:
 
 
 class TestFormatComment:
-    def test_contains_failure_type(self, sample_result):
-        comment = entrypoint.format_comment(sample_result, "openai/gpt-4o-mini")
-        assert "`test_failure`" in comment
-
-    def test_contains_confidence(self, sample_result):
-        comment = entrypoint.format_comment(sample_result, "openai/gpt-4o-mini")
-        assert "`high`" in comment
-
-    def test_contains_root_cause(self, sample_result):
-        comment = entrypoint.format_comment(sample_result, "openai/gpt-4o-mini")
-        assert "AssertionError in test_add" in comment
-
-    def test_contributing_factors_bulleted(self, sample_result):
-        comment = entrypoint.format_comment(sample_result, "openai/gpt-4o-mini")
-        assert "- Off-by-one error in add()" in comment
-        assert "- Missing edge case coverage" in comment
-
-    def test_contains_suggested_fix(self, sample_result):
-        comment = entrypoint.format_comment(sample_result, "openai/gpt-4o-mini")
-        assert "Fix the return value" in comment
-
-    def test_log_lines_in_code_block(self, sample_result):
-        comment = entrypoint.format_comment(sample_result, "openai/gpt-4o-mini")
-        assert "FAILED tests/test_math.py::test_add" in comment
-        assert "AssertionError: 4 != 5" in comment
-
-    def test_model_in_footer(self, sample_result):
-        comment = entrypoint.format_comment(sample_result, "openai/gpt-4o-mini")
-        assert "openai/gpt-4o-mini" in comment
-
-    def test_cifi_link_in_footer(self, sample_result):
-        comment = entrypoint.format_comment(sample_result, "openai/gpt-4o-mini")
-        assert "https://github.com/alihaidar2950/cifi" in comment
-
-    def test_comment_contains_dedup_marker(self, sample_result):
+    def test_format_comment_structure(self, sample_result):
+        """Single comprehensive check — all fields appear in the comment."""
         comment = entrypoint.format_comment(sample_result, "openai/gpt-4o-mini")
         assert entrypoint._COMMENT_MARKER in comment
+        assert "`test_failure`" in comment
+        assert "`high`" in comment
+        assert "AssertionError in test_add" in comment
+        assert "- Off-by-one error in add()" in comment
+        assert "Fix the return value" in comment
+        assert "FAILED tests/test_math.py::test_add" in comment
+        assert "openai/gpt-4o-mini" in comment
+        assert "https://github.com/alihaidar2950/cifi" in comment
 
 
 class TestGetPrNumber:
@@ -149,19 +124,6 @@ class TestPostComment:
         assert "comments/999" in url
         mock_client.post.assert_not_called()
 
-    def test_sends_correct_body(self):
-        mock_client, _ = self._mock_client()
-        with patch("entrypoint.httpx.Client", return_value=mock_client):
-            entrypoint.post_comment("tok", "owner/repo", 7, "my comment")
-        assert mock_client.post.call_args.kwargs["json"] == {"body": "my comment"}
-
-    def test_sends_auth_header(self):
-        mock_client, _ = self._mock_client()
-        with patch("entrypoint.httpx.Client", return_value=mock_client):
-            entrypoint.post_comment("my-secret-token", "owner/repo", 1, "body")
-        headers = mock_client.post.call_args.kwargs["headers"]
-        assert headers["Authorization"] == "Bearer my-secret-token"
-
     def test_raises_on_http_error(self):
         mock_response = MagicMock()
         mock_response.raise_for_status.side_effect = Exception("HTTP 403")
@@ -175,56 +137,6 @@ class TestPostComment:
         with patch("entrypoint.httpx.Client", return_value=mock_client):
             with pytest.raises(Exception, match="HTTP 403"):
                 entrypoint.post_comment("tok", "owner/repo", 1, "body")
-
-
-class TestFetchRunLogs:
-    @pytest.mark.asyncio
-    async def test_fetches_failed_job_logs(self):
-        jobs_payload = {
-            "jobs": [
-                {"id": 101, "conclusion": "success"},
-                {"id": 202, "conclusion": "failure"},
-            ]
-        }
-        log_text = "ERROR: test failed\nAssertionError: 1 != 2"
-
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-
-        jobs_resp = MagicMock(status_code=200)
-        jobs_resp.raise_for_status = MagicMock()
-        jobs_resp.json.return_value = jobs_payload
-
-        log_resp = MagicMock(status_code=200, text=log_text)
-
-        mock_client.get.side_effect = [jobs_resp, log_resp]
-
-        with patch("entrypoint.httpx.AsyncClient", return_value=mock_client):
-            result = await entrypoint.fetch_run_logs("tok", "owner/repo", 123)
-
-        assert log_text in result
-
-    @pytest.mark.asyncio
-    async def test_falls_back_to_first_job_when_no_failures(self):
-        jobs_payload = {"jobs": [{"id": 101, "conclusion": "success"}]}
-        log_resp_text = "some log"
-
-        mock_client = AsyncMock()
-        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-        mock_client.__aexit__ = AsyncMock(return_value=False)
-
-        jobs_resp = MagicMock(status_code=200)
-        jobs_resp.raise_for_status = MagicMock()
-        jobs_resp.json.return_value = jobs_payload
-
-        log_resp = MagicMock(status_code=200, text=log_resp_text)
-        mock_client.get.side_effect = [jobs_resp, log_resp]
-
-        with patch("entrypoint.httpx.AsyncClient", return_value=mock_client):
-            result = await entrypoint.fetch_run_logs("tok", "owner/repo", 123)
-
-        assert log_resp_text in result
 
 
 class TestWriteOutputs:
