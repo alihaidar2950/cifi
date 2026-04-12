@@ -66,6 +66,21 @@
 
 ---
 
+### 2026-04-12: Test restructure — unit/ and integration/ separation
+**By:** Lambert (Tester)
+**What:** Moved all tests into tests/unit/ and tests/integration/. Removed hollow mock-theatre tests from test_action_entrypoint.py: collapsed 9 TestFormatComment tests to 1, removed TestFetchRunLogs class (2 tests), removed 2 hollow TestPostComment tests.
+**Net change:** 12 tests removed, 61 remain
+**Why:** Mock theatre tests verify that mocks work, not that the code works. 9 separate single-assertion tests for one pure function are noise.
+
+---
+
+### 2026-04-12: pyproject.toml and Makefile updated for test restructure
+**By:** Parker (DevOps)
+**What:** testpaths updated to tests/unit + tests/integration. Makefile test target now only runs unit by default. test-integration is explicit.
+**Why:** Unit and integration tests have different requirements (GITHUB_TOKEN). Separating them prevents CI failures when token isn't set.
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus

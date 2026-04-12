@@ -7,13 +7,13 @@ export
 install:
 	pip install -e ".[dev]"
 
-test: test-unit test-integration
+test: test-unit
 
 test-unit:
-	python -m pytest tests/ -v --ignore=tests/test_integration.py
+	python -m pytest tests/unit/ -v
 
 test-integration:
-	python -m pytest tests/test_integration.py -v
+	python -m pytest tests/integration/ -v
 
 lint:
 	python -m ruff check cifi/ tests/
