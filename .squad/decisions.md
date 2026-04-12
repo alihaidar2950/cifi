@@ -81,6 +81,15 @@
 
 ---
 
+### 2026-04-12: cifi-demo-app — real-world demo target strategy
+**By:** Ripley (Lead)
+**What:** Build synthetic-but-realistic FastAPI service (cifi-demo-app) as CIFI's real-world demo target. Five bug/* branches each demonstrate a distinct CI failure type.
+**Why:** OSS repos (httpx, pydantic, etc.) can't be used directly — can't open bug PRs, forks look staged, no narrative control. A purpose-built demo app gives full control, reproducibility, and a clear story for blog posts and marketplace launch.
+**Repo:** https://github.com/alihaidar2950/cifi-demo-app
+**Bug branches:** bug/auth-type-error, bug/import-cycle, bug/assertion-failure, bug/dep-conflict, bug/db-migration
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus

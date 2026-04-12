@@ -25,4 +25,4 @@ Tracks and drives the work queue. Makes sure the team never sits idle.
 
 ## Model
 
-Preferred: claude-opus-4.6
+Preferred: claude-haiku-4.5

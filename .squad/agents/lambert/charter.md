@@ -39,4 +39,4 @@ Testing, quality assurance, and edge case coverage for CIFI.
 
 ## Model
 
-Preferred: claude-sonnet-4.6
+Preferred: claude-sonnet-4.5

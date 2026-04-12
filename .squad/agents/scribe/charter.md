@@ -28,4 +28,4 @@ Silent documentation specialist. Maintains history, decisions, orchestration log
 
 ## Model
 
-Preferred: claude-opus-4.6
+Preferred: claude-haiku-4.5
