@@ -41,4 +41,4 @@ GitHub Action packaging, Docker, CI/CD, and infrastructure for CIFI.
 
 ## Model
 
-Preferred: claude-sonnet-4.5
+Preferred: claude-opus-4.6
